@@ -103,6 +103,11 @@ zig build -Ddesk=~/path/to/pier/browser     # or: scripts/install.sh ~/path/to/p
 |install our %browser
 ```
 
+The desk ships a Landscape tile (`desk.docket-0`): "Browser" opens the live
+viewer at `/browser/view`, which lists contexts and shows each one's current
+outline, downloads and recording. The tile icon is served by the agent at
+`/browser/icon.svg`.
+
 Read the API key the agent generated:
 
 ```text
@@ -195,6 +200,8 @@ desk/lib/browser-mcp.hoon    tool catalog, JSON-RPC envelopes, paging
 desk/lib/browser-cookie.hoon cookie jar (Set-Cookie parsing, matching)
 desk/lib/browser-url.hoon    URL splitting/resolution, host policy
 desk/sur/browser.hoon        types
+desk/desk.docket-0           Landscape tile (opens the viewer page)
+desk/lib/browser-icon.hoon   tile icon (SVG), served at /browser/icon.svg
 desk/js/browser-runtime.js   generated page runtime (from js/src/*.js)
 js/src/                      HTML parser, DOM, selectors, forms, window, CSS cascade, ES modules, snapshot
 desk/lib/wasm, desk/sur/wasm urwasm (vendored, [%zuse 408])

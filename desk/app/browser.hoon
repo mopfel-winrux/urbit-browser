@@ -9,7 +9,7 @@
 ::
 /-  *browser
 /+  default-agent, dbug, verb, server, wasm=wasm-lia,
-    url=browser-url, ck=browser-cookie, mcp=browser-mcp, js=browser-js
+    url=browser-url, ck=browser-cookie, mcp=browser-mcp, js=browser-js, icon=browser-icon
 |%
 +$  versioned-state  $%(state-0)
 +$  state-0
@@ -409,6 +409,11 @@
   ^-  (quip card _state)
   =/  =request:http  request.req
   =/  path=(list @t)  (path-of url.request)
+  ::  the tile image is public
+  ?:  =(~['browser' 'icon.svg'] path)
+    :_  state
+    %+  give-simple-payload:app:server  eyre-id
+    [[200 ~[['content-type' 'image/svg+xml'] ['cache-control' 'public, max-age=86400']]] `(as-octs:mimes:html svg:icon)]
   ?.  (authed req)
     :_  state
     (respond-json eyre-id 401 (pairs:enjs:format ~[['error' s+'unauthorized: send x-api-key or an authenticated session']]))

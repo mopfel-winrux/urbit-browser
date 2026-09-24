@@ -1,0 +1,10 @@
+:~
+  title+'Browser'
+  info+'A headless web browser for agents, exposed as an MCP server.'
+  color+0x1b.2a41
+  image+'/browser/icon.svg'
+  site+/browser/view
+  version+[0 2 0]
+  website+'https://github.com/mopfel-winrux/urbit-browser'
+  license+'MIT'
+==
