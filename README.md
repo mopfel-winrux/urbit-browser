@@ -244,3 +244,7 @@ registration itself is done in the harness UI as described above.
 The runtime is deterministic: `Math.random`, `Date` and timers are driven by
 values the ship supplies, so the Lia script that produced a page can be
 replayed from its recorded host results.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
