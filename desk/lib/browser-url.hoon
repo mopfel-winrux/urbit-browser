@@ -69,13 +69,7 @@
 ++  render
   |=  p=parts
   ^-  @t
-  %+  rap  3
-  :~  ?:(secure.p 'https://' 'http://')
-      host.p
-      ?~(port.p '' (cat 3 ':' (crip (a-co:co u.port.p))))
-      path.p
-      query.p
-  ==
+  (rap 3 (origin p) path.p query.p ~)
 ++  origin
   |=  p=parts
   ^-  @t
@@ -87,7 +81,8 @@
   ^-  (unit parts)
   =/  ref=tape  (trim (trip raw))
   ?:  =(~ ref)  `base(query '')
-  ?^  (split (crip ref))  (split (crip ref))
+  =/  absolute  (split (crip ref))
+  ?^  absolute  absolute
   ?:  ?=(^ (find "://" (scag 12 ref)))  ~          ::  other scheme
   ?:  =("//" (scag 2 ref))
     (split (rap 3 ?:(secure.base 'https:' 'http:') (crip ref) ~))
@@ -144,15 +139,26 @@
     $(segs t.segs)
   ?~  i.segs  $(segs t.segs)
   $(segs t.segs, out [i.segs out])
-++  segments
-  |=  path=tape
+++  segments  |=(path=tape (split-on "/" path))
+::  +split-on: split a tape at any of the separator characters
+::
+++  split-on
+  |=  [seps=tape t=tape]
   ^-  (list tape)
   =|  cur=tape
   =|  out=(list tape)
   |-  ^-  (list tape)
-  ?~  path  (flop [(flop cur) out])
-  ?:  =('/' i.path)  $(path t.path, out [(flop cur) out], cur ~)
-  $(path t.path, cur [i.path cur])
+  ?~  t  (flop [(flop cur) out])
+  ?:  (lien seps |=(c=@tD =(c i.t)))  $(t t.t, out [(flop cur) out], cur ~)
+  $(t t.t, cur [i.t cur])
+::  +ends-with: suffix test on tapes
+::
+++  ends-with
+  |=  [t=tape suffix=tape]
+  ^-  ?
+  =/  n  (lent suffix)
+  ?:  (lth (lent t) n)  |
+  =((slag (sub (lent t) n) t) suffix)
 ::  +private: loopback, private and local hosts
 ::
 ++  private
@@ -162,13 +168,8 @@
   ?:  =("localhost" tap)  &
   ?:  ?=(^ (find ".localhost" tap))  &
   ?:  =("0.0.0.0" tap)  &
-  =/  suf
-    |=  s=tape
-    ^-  ?
-    =/  n  (lent s)
-    ?:  (lth (lent tap) n)  |
-    =((slag (sub (lent tap) n) tap) s)
-  ?:  |((suf ".local") (suf ".internal") (suf ".home.arpa") (suf ".lan") (suf ".corp") (suf ".home"))  &
+  =/  local-suffixes=(list tape)  ~[".local" ".internal" ".home.arpa" ".lan" ".corp" ".home"]
+  ?:  (lien local-suffixes |=(s=tape (ends-with tap s)))  &
   ?:  =('[' (snag 0 tap))
     =/  inner  (cass (scag (dec (lent tap)) (slag 1 tap)))
     ?:  |(=("::1" inner) =("::" inner))  &
@@ -194,10 +195,8 @@
   =/  hos  (trip host)
   ?:  =("*" pat)  &
   ?:  =("*." (scag 2 pat))
-    =/  base  (slag 2 pat)
+    =/  base=tape  (slag 2 pat)
     ?:  =(base hos)  &
-    =/  n  (lent base)
-    ?:  (lte (lent hos) n)  |
-    =((slag (sub (lent hos) +(n)) hos) ['.' base])
+    (ends-with hos `tape`['.' base])
   =(pat hos)
 --

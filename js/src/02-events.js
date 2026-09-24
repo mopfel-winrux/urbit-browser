@@ -27,29 +27,31 @@ class MouseEventImpl extends UIEventImpl {
 }
 class PointerEventImpl extends MouseEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.pointerId = i.pointerId || 1; this.pointerType = i.pointerType || 'mouse'; this.isPrimary = true; this.width = 1; this.height = 1; this.pressure = 0; } }
 class WheelEventImpl extends MouseEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.deltaX = i.deltaX || 0; this.deltaY = i.deltaY || 0; this.deltaZ = 0; this.deltaMode = 0; } }
-class FocusEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); this.relatedTarget = (i && i.relatedTarget) || null; } }
+// subclasses that only add defaulted fields
+const eventClass = (Base, fields) => class extends Base { constructor(t, i) { super(t, i); i = i || {}; for (const k of Object.keys(fields)) this[k] = i[k] === undefined ? fields[k] : i[k]; } };
+const FocusEventImpl = eventClass(UIEventImpl, { relatedTarget: null });
 const KEY_CODES = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, ' ': 32, Space: 32, Home: 36, End: 35, PageUp: 33, PageDown: 34 };
 class KeyboardEventImpl extends UIEventImpl {
   constructor(t, i) { super(t, i); i = i || {}; this.key = i.key || ''; this.code = i.code || ''; this.location = 0; this.repeat = !!i.repeat; this.isComposing = false; for (const k of ['ctrlKey', 'shiftKey', 'altKey', 'metaKey']) this[k] = !!i[k]; this.keyCode = i.keyCode !== undefined ? i.keyCode : (KEY_CODES[this.key] !== undefined ? KEY_CODES[this.key] : (this.key.length === 1 ? this.key.toUpperCase().charCodeAt(0) : 0)); this.which = this.keyCode; this.charCode = this.key.length === 1 ? this.key.charCodeAt(0) : 0; }
   getModifierState() { return false; }
 }
-class InputEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.data = i.data === undefined ? null : i.data; this.inputType = i.inputType || ''; this.isComposing = false; } }
-class CustomEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.detail = i && i.detail !== undefined ? i.detail : null; } initCustomEvent(t, b, c, d) { this.initEvent(t, b, c); this.detail = d; } }
-class SubmitEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.submitter = (i && i.submitter) || null; } }
-class PopStateEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.state = (i && i.state !== undefined) ? i.state : null; } }
-class HashChangeEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.oldURL = i.oldURL || ''; this.newURL = i.newURL || ''; } }
-class StorageEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.key = i.key || null; this.oldValue = i.oldValue || null; this.newValue = i.newValue || null; this.url = i.url || ''; this.storageArea = i.storageArea || null; } }
-class ErrorEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.message = i.message || ''; this.filename = i.filename || ''; this.lineno = i.lineno || 0; this.colno = i.colno || 0; this.error = i.error; } }
-class PromiseRejectionEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.promise = i.promise; this.reason = i.reason; } }
-class ProgressEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.lengthComputable = !!i.lengthComputable; this.loaded = i.loaded || 0; this.total = i.total || 0; } }
-class MessageEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.data = i.data === undefined ? null : i.data; this.origin = i.origin || ''; this.lastEventId = i.lastEventId || ''; this.source = i.source || null; this.ports = i.ports || []; } }
-class TransitionEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.propertyName = i.propertyName || ''; this.elapsedTime = i.elapsedTime || 0; this.pseudoElement = ''; } }
-class AnimationEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.animationName = i.animationName || ''; this.elapsedTime = i.elapsedTime || 0; this.pseudoElement = ''; } }
-class DragEventImpl extends MouseEventImpl { constructor(t, i) { super(t, i); this.dataTransfer = (i && i.dataTransfer) || null; } }
-class TouchEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.touches = i.touches || []; this.targetTouches = i.targetTouches || []; this.changedTouches = i.changedTouches || []; } }
-class ClipboardEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.clipboardData = (i && i.clipboardData) || null; } }
-class BeforeUnloadEventImpl extends EventImpl { constructor(t, i) { super(t, i); } }
-class CompositionEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); this.data = (i && i.data) || ''; } }
+const InputEventImpl = eventClass(UIEventImpl, { data: null, inputType: '', isComposing: false });
+class CustomEventImpl extends eventClass(EventImpl, { detail: null }) { initCustomEvent(t, b, c, d) { this.initEvent(t, b, c); this.detail = d; } }
+const SubmitEventImpl = eventClass(EventImpl, { submitter: null });
+const PopStateEventImpl = eventClass(EventImpl, { state: null });
+const HashChangeEventImpl = eventClass(EventImpl, { oldURL: '', newURL: '' });
+const StorageEventImpl = eventClass(EventImpl, { key: null, oldValue: null, newValue: null, url: '', storageArea: null });
+const ErrorEventImpl = eventClass(EventImpl, { message: '', filename: '', lineno: 0, colno: 0, error: undefined });
+const PromiseRejectionEventImpl = eventClass(EventImpl, { promise: undefined, reason: undefined });
+const ProgressEventImpl = eventClass(EventImpl, { lengthComputable: false, loaded: 0, total: 0 });
+const MessageEventImpl = eventClass(EventImpl, { data: null, origin: '', lastEventId: '', source: null, ports: [] });
+const TransitionEventImpl = eventClass(EventImpl, { propertyName: '', elapsedTime: 0, pseudoElement: '' });
+const AnimationEventImpl = eventClass(EventImpl, { animationName: '', elapsedTime: 0, pseudoElement: '' });
+const DragEventImpl = eventClass(MouseEventImpl, { dataTransfer: null });
+const TouchEventImpl = eventClass(UIEventImpl, { touches: [], targetTouches: [], changedTouches: [] });
+const ClipboardEventImpl = eventClass(EventImpl, { clipboardData: null });
+const BeforeUnloadEventImpl = eventClass(EventImpl, {});
+const CompositionEventImpl = eventClass(UIEventImpl, { data: '' });
 
 const listenersKey = Symbol('listeners');
 class EventTargetImpl {

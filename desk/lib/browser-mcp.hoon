@@ -160,6 +160,19 @@
           ['proxy' 'string' 'Gateway template containing {url}, for example http://gw.local:8080/fetch?u={url}; empty clears it (configure).' |]
       ==
   ==
+::  +names: every tool name in the catalog
+::
+++  names
+  ^-  (set @t)
+  =/  list  tools
+  ?.  ?=([%a *] list)  ~
+  %-  silt
+  %+  murn  p.list
+  |=  j=json
+  ^-  (unit @t)
+  ?.  ?=([%o *] j)  ~
+  =/  n  (~(get by p.j) 'name')
+  ?:(?=([~ %s *] n) `p.u.n ~)
 ++  tool
   |=  [name=@t desc=@t schema=json]
   ^-  json

@@ -38,12 +38,14 @@
       subrequests=@ud
       js=?
       auth-retried=?
+      push=?                ::  this navigation enters the history
+      status=@ud            ::  http status of the page being loaded
       phase=phase
   ==
 +$  phase
   $%  [%queued ~]
-      [%fetch url=@t method=@t body=(unit octs) ctype=@t referrer=@t push=? since=@da]
-      [%run kind=?(%load %act %query) sub=(unit [url=@t kind=@t since=@da]) push=?]
+      [%fetch url=@t method=@t body=(unit octs) ctype=@t referrer=@t since=@da]
+      [%run kind=?(%load %act %query) sub=(unit [url=@t kind=@t since=@da])]
   ==
 +$  card  card:agent:gall
 ++  default-policy
@@ -107,9 +109,7 @@
   ^-  (quip card _this)
   =.  key  make-key:hc
   =.  policy  default-policy
-  :_  this
-  :~  [%pass /eyre/connect %arvo %e %connect [~ /browser] %browser]
-  ==
+  [~[connect-card:hc] this]
 ++  on-save  !>(state)
 ++  on-load
   |=  old=vase
@@ -124,9 +124,7 @@
     =.  queue  ~
     =.  active  ~
     =.  pristine  ~
-    :_  this
-    :~  [%pass /eyre/connect %arvo %e %connect [~ /browser] %browser]
-    ==
+    [~[connect-card:hc] this]
   ==
 ++  on-poke
   |=  [=mark =vase]
@@ -196,10 +194,16 @@
 ::
 |_  =bowl:gall
 +*  this  .
+++  connect-card  ^-(card [%pass /eyre/connect %arvo %e %connect [~ /browser] %browser])
 ++  make-key
   ^-  @t
   (scot %uv (end [3 20] (shax (jam [eny.bowl now.bowl]))))
 ++  cass-cord  |=(c=@t (crip (cass (trip c))))
+++  effective-ua
+  |=  d=device
+  ^-  @t
+  ?.  =('' user-agent.d)  user-agent.d
+  ?:(mobile.d mobile-ua user-agent.policy)
 ::  +drop-seed: free a context's live runtime (and the jet's cached machine)
 ::
 ++  drop-seed
@@ -239,11 +243,6 @@
   `(~(run by p.u.v) |=(j=json ?:(?=([%s *] j) p.j '')))
 ++  jobj  |=([m=(map @t json) k=@t] ^-((map @t json) =/(v (~(get by m) k) ?:(?=([~ %o *] v) p.u.v ~))))
 ++  ms-since  |=(t=@da ^-(@ud (div (mul 1.000 (sub now.bowl t)) ~s1)))
-++  unix-ms
-  |=  t=@da
-  ^-  @ud
-  ?:  (lth t ~1970.1.1)  0
-  (div (mul 1.000 (sub t ~1970.1.1)) ~s1)
 ::  JSON views
 ::
 ++  cookie-json
@@ -252,7 +251,7 @@
   %-  pairs:enjs:format
   :~  ['name' s+name.c]  ['value' s+value.c]  ['domain' s+domain.c]  ['path' s+path.c]
       ['secure' b+secure.c]  ['httpOnly' b+http-only.c]  ['hostOnly' b+host-only.c]
-      ['expires' ?~(expires.c ~ (numb:enjs:format (unix-ms u.expires.c)))]
+      ['expires' ?~(expires.c ~ (time:enjs:format u.expires.c))]
   ==
 ++  json-cookie
   |=  j=json
@@ -265,7 +264,7 @@
     ?.  ?=([~ %n *] v)  ~
     =/  ms  (fall (rush p.u.v dem) 0)
     ?:  =(0 ms)  ~
-    `(add ~1970.1.1 (div (mul ms ~s1) 1.000))
+    `(from-unix-ms:chrono:userlib ms)
   :-  ~
   :*  (jstr m 'name')  (jstr m 'value')  (jstr m 'domain')  ?:(=('' (jstr m 'path')) '/' (jstr m 'path'))
       (jbool m 'secure' |)  (jbool m 'httpOnly' |)  (jbool m 'hostOnly' &)  exp
@@ -371,7 +370,7 @@
     =/  c  (~(get by contexts) id.act)
     ?~  c  `state
     =+  (drop-seed u.c)
-    `state(contexts (~(del by contexts) id.act))
+    `state(contexts (~(del by contexts) id.act), queue (~(del by queue) id.act))
       %clear-cache  `state(cache ~, cache-bytes 0)
       %set-credential  `state(credentials (~(put by credentials) (norm-origin origin.credential.act) credential.act))
       %del-credential  `state(credentials (~(del by credentials) (norm-origin origin.act)))
@@ -396,7 +395,8 @@
   ::
       %set-device
     =/  c  (fall (~(get by contexts) id.act) (fresh-context now.bowl))
-    `state(contexts (~(put by contexts) id.act c(device device.act)))
+    =/  reset  (drop-seed c)
+    `state(contexts (~(put by contexts) id.act reset(device device.act)))
   ::
       %import-context
     =/  c  (fall (~(get by contexts) id.act) (fresh-context now.bowl))
@@ -416,10 +416,10 @@
     [[200 ~[['content-type' 'image/svg+xml'] ['cache-control' 'public, max-age=86400']]] `(as-octs:mimes:html svg:icon)]
   ?.  (authed req)
     :_  state
-    (respond-json eyre-id 401 (pairs:enjs:format ~[['error' s+'unauthorized: send x-api-key or an authenticated session']]))
+    (respond-error eyre-id 401 'unauthorized: send x-api-key or an authenticated session')
   ?+    path
     :_  state
-    (respond-json eyre-id 404 (pairs:enjs:format ~[['error' s+'not found']]))
+    (respond-error eyre-id 404 'not found')
   ::
       [%browser %tools ~]
     :_  state
@@ -427,14 +427,14 @@
   ::
       [%browser %export @ ~]
     =/  c  (~(get by contexts) (de-seg i.t.t.path))
-    ?~  c  :_(state (respond-json eyre-id 404 (pairs:enjs:format ~[['error' s+'no such context']])))
+    ?~  c  :_(state (respond-error eyre-id 404 'no such context'))
     :_  state  (respond-json eyre-id 200 (export-json u.c))
   ::
       [%browser %files @ @ ~]
     =/  c  (~(get by contexts) (de-seg i.t.t.path))
-    ?~  c  :_(state (respond-json eyre-id 404 (pairs:enjs:format ~[['error' s+'no such context']])))
+    ?~  c  :_(state (respond-error eyre-id 404 'no such context'))
     =/  f  (~(get by files.u.c) (de-seg i.t.t.t.path))
-    ?~  f  :_(state (respond-json eyre-id 404 (pairs:enjs:format ~[['error' s+'no such file']])))
+    ?~  f  :_(state (respond-error eyre-id 404 'no such file'))
     :_  state
     %+  give-simple-payload:app:server  eyre-id
     [[200 ~[['content-type' mime.u.f] ['content-disposition' (rap 3 'attachment; filename="' (de-seg i.t.t.t.path) '"' ~)]]] `data.u.f]
@@ -451,7 +451,7 @@
       [%browser %mcp ~]
     ?.  =(%'POST' method.request)
       :_  state
-      (respond-json eyre-id 405 (pairs:enjs:format ~[['error' s+'MCP endpoint accepts POST only; no SSE stream']]))
+      (respond-error eyre-id 405 'MCP endpoint accepts POST only; no SSE stream')
     =/  jon=(unit json)
       ?~  body.request  ~
       (de:json:html q.u.body.request)
@@ -465,27 +465,18 @@
       :_  state
       (respond-json eyre-id 400 (error:mcp ~ 32.600 'invalid request'))
     =/  id=json  (fall (~(get by p.u.jon) 'id') ~)
-    =/  method=@t
-      =/  m  (~(get by p.u.jon) 'method')
-      ?:(?=([~ %s *] m) p.u.m '')
-    =/  params=(map @t json)
-      =/  p  (~(get by p.u.jon) 'params')
-      ?:(?=([~ %o *] p) p.u.p ~)
+    =/  method=@t  (jstr p.u.jon 'method')
+    =/  params=(map @t json)  (jobj p.u.jon 'params')
     (handle-rpc eyre-id id method params)
   ==
 ++  de-seg  |=(s=@t ^-(@t (crip (fall (de-urlt:html (trip s)) (trip s)))))
 ++  path-of
-  |=  url=@t
+  |=  raw=@t
   ^-  (list @t)
-  =/  tap  (trip url)
+  =/  tap  (trip raw)
   =/  q  (find "?" tap)
-  =/  clean  ?~(q tap (scag u.q tap))
-  =|  cur=tape
-  =|  out=(list @t)
-  |-  ^-  (list @t)
-  ?~  clean  (flop ?~(cur out [(crip (flop cur)) out]))
-  ?:  =('/' i.clean)  $(clean t.clean, out ?~(cur out [(crip (flop cur)) out]), cur ~)
-  $(clean t.clean, cur [i.clean cur])
+  =/  clean=tape  ?~(q tap (scag u.q tap))
+  (turn (skip (split-on:url "/" clean) |=(s=tape =(~ s))) crip)
 ++  authed
   |=  req=inbound-request:eyre
   ^-  ?
@@ -508,6 +499,14 @@
   %+  give-simple-payload:app:server  eyre-id
   :-  [200 ~[['content-type' 'text/html; charset=utf-8'] ['cache-control' 'no-store']]]
   `(as-octs:mimes:html markup)
+++  respond-error
+  |=  [eyre-id=@ta status=@ud msg=@t]
+  ^-  (list card)
+  (respond-json eyre-id status (pairs:enjs:format ~[['error' s+msg]]))
+++  reply
+  |=  [eyre-id=@ta id=json text=@t err=?]
+  ^-  (list card)
+  (respond-json eyre-id 200 (text-result:mcp id text err))
 ++  respond-empty
   |=  [eyre-id=@ta status=@ud]
   ^-  (list card)
@@ -603,12 +602,8 @@
     (respond-json eyre-id 200 (result:mcp id (pairs:enjs:format ~[['tools' tools:mcp]])))
   ::
       %'tools/call'
-    =/  name=@t
-      =/  n  (~(get by params) 'name')
-      ?:(?=([~ %s *] n) p.u.n '')
-    =/  args=(map @t json)
-      =/  a  (~(get by params) 'arguments')
-      ?:(?=([~ %o *] a) p.u.a ~)
+    =/  name=@t  (jstr params 'name')
+    =/  args=(map @t json)  (jobj params 'arguments')
     (call-tool eyre-id id name args)
   ==
 ::  +call-tool: admit a tool call as a job on its context
@@ -630,14 +625,14 @@
   =.  state  (expire-contexts now.bowl)
   ?:  &(!(~(has by contexts) cid) (gte ~(wyt by contexts) max-contexts.policy))
     :_  state
-    (respond-json eyre-id 200 (text-result:mcp id 'too many contexts; close one with browser_contexts' &))
+    (reply eyre-id id 'too many contexts; close one with browser_contexts' &)
   =?  contexts  !(~(has by contexts) cid)
     (~(put by contexts) cid (fresh-context now.bowl))
   =/  js=?
     =/  j  (~(get by args) 'js')
     ?:(?=([~ %b *] j) p.u.j js.policy)
   =/  jid  next-job
-  =/  =job  [eyre-id id cid name args now.bowl 0 0 js | [%queued ~]]
+  =/  =job  [eyre-id id cid name args now.bowl 0 0 js | & 0 [%queued ~]]
   =.  next-job  +(next-job)
   =.  jobs  (~(put by jobs) jid job)
   =/  c  (~(got by contexts) cid)
@@ -647,16 +642,7 @@
     [~[timer] state]
   =^  cards  state  (start-job jid)
   [[timer cards] state]
-++  known-tool
-  |=  name=@t
-  ^-  ?
-  ?=  $?  %'browser_navigate'  %'browser_snapshot'  %'browser_click'  %'browser_type'
-          %'browser_select'  %'browser_press'  %'browser_hover'  %'browser_submit'
-          %'browser_text'  %'browser_find'  %'browser_links'  %'browser_html'
-          %'browser_eval'  %'browser_wait'  %'browser_back'  %'browser_contexts'
-          %'browser_login'  %'browser_upload'  %'browser_metadata'  %'browser_files'  %'browser_log'
-      ==
-    name
+++  known-tool  |=(name=@t (~(has in names:mcp) name))
 ::  +expire-contexts: drop idle contexts, and idle runtimes beyond max-live
 ::
 ++  expire-contexts
@@ -697,7 +683,15 @@
   =/  num  |=(k=@t ^-(@ud (jnum args.job k)))
   =/  boo  |=([k=@t d=?] ^-(? (jbool args.job k d)))
   =/  no-page  'no page loaded in this context; call browser_navigate first'
-  =/  no-live  'no live page in this context; call browser_navigate first'
+  ::  every tool but navigation, snapshot, text and history needs a live runtime
+  =/  needs-live
+    ?=  $?  %'browser_metadata'  %'browser_find'  %'browser_links'  %'browser_html'  %'browser_eval'
+            %'browser_click'  %'browser_type'  %'browser_select'  %'browser_press'  %'browser_hover'
+            %'browser_submit'  %'browser_wait'  %'browser_upload'  %'browser_login'
+        ==
+      tool
+  ?:  &(needs-live ?=(~ seed.c))
+    (finish-error jid 'no live page in this context; call browser_navigate first')
   =/  opt-obj
     |=  keys=(list @t)
     ^-  json
@@ -705,7 +699,7 @@
   ?+    tool  (finish-error jid 'unknown tool')
       %'browser_navigate'
     =.  state  (note cid.job 'navigate' (str 'url'))
-    (begin-fetch jid (str 'url') 'GET' ~ '' (str 'referrer') & ~)
+    (begin-fetch jid (str 'url') 'GET' ~ '' (str 'referrer') ~)
   ::
       %'browser_back'
     =/  forward  =('forward' (str 'direction'))
@@ -721,7 +715,8 @@
       c(forward [(fall (head-of back.c) '') forward.c], back (fall (tail-of back.c) ~))
     =.  contexts  (~(put by contexts) cid.job c)
     =.  state  (note cid.job ?:(forward 'forward' 'back') u.target)
-    (begin-fetch jid u.target 'GET' ~ '' '' | ~)
+    =.  jobs  (~(put by jobs) jid job(push |))
+    (begin-fetch jid u.target 'GET' ~ '' '' ~)
   ::
       %'browser_snapshot'
     ?~  page.c  (finish-error jid no-page)
@@ -732,70 +727,56 @@
   ::
       %'browser_text'
     ?~  page.c  (finish-error jid no-page)
-    ?~  seed.c
-      =/  r  (page-text:mcp text.u.page.c (max 1 (num 'page')) page-bytes.policy)
-      (finish-text jid (rap 3 (page-header u.page.c) 'Text page ' (scot %ud page.r) '/' (scot %ud pages.r) '\0a---\0a' body.r ~) |)
+    ::  a cached whole-page text serves later pages without the runtime
+    ?:  |(?=(~ seed.c) &(!=('' text.u.page.c) =('' (str 'ref')) =('' (str 'selector'))))
+      (finish-text jid (render-text u.page.c text.u.page.c (max 1 (num 'page'))) |)
     (run-script jid %query (query:js 'text' (en:json:html (opt-obj ~['ref' 'selector'])) ''))
   ::
       %'browser_metadata'
-    ?~  seed.c  (finish-error jid no-live)
     (run-script jid %query (query:js 'metadata' '' ''))
   ::
       %'browser_find'
-    ?~  seed.c  (finish-error jid no-live)
     (run-script jid %query (query:js 'find' (str 'query') '{}'))
   ::
       %'browser_links'
-    ?~  seed.c  (finish-error jid no-live)
     (run-script jid %query (query:js 'links' (en:json:html (opt-obj ~['filter'])) ''))
   ::
       %'browser_html'
-    ?~  seed.c  (finish-error jid no-live)
     =/  opts  (pairs:enjs:format (weld (murn ~['ref' 'selector'] |=(k=@t ?:(=('' (str k)) ~ `[k `json`s+(str k)]))) ~[['clean' `json`b+(boo 'clean' |)]]))
     (run-script jid %query (query:js 'html' (en:json:html opts) ''))
   ::
       %'browser_eval'
     ?.  js.policy  (finish-error jid 'JavaScript is disabled by policy')
-    ?~  seed.c  (finish-error jid no-live)
     (run-action jid (pairs:enjs:format ~[['type' s+'eval'] ['code' s+(str 'code')]]))
   ::
       %'browser_click'
-    ?~  seed.c  (finish-error jid no-live)
     (run-action jid (pairs:enjs:format ~[['type' s+'click'] ['ref' s+(str 'ref')]]))
   ::
       %'browser_type'
-    ?~  seed.c  (finish-error jid no-live)
     (run-action jid (pairs:enjs:format ~[['type' s+'type'] ['ref' s+(str 'ref')] ['text' s+(str 'text')] ['submit' b+(boo 'submit' |)] ['clear' b+(boo 'clear' &)]]))
   ::
       %'browser_select'
-    ?~  seed.c  (finish-error jid no-live)
     (run-action jid (pairs:enjs:format ~[['type' s+'select'] ['ref' s+(str 'ref')] ['value' s+(str 'value')]]))
   ::
       %'browser_press'
-    ?~  seed.c  (finish-error jid no-live)
     (run-action jid (pairs:enjs:format ~[['type' s+'press'] ['key' s+(str 'key')] ['ref' s+(str 'ref')] ['shift' b+(boo 'shift' |)]]))
   ::
       %'browser_hover'
-    ?~  seed.c  (finish-error jid no-live)
     (run-action jid (pairs:enjs:format ~[['type' s+'hover'] ['ref' s+(str 'ref')]]))
   ::
       %'browser_submit'
-    ?~  seed.c  (finish-error jid no-live)
     (run-action jid (pairs:enjs:format ~[['type' s+'submit'] ['ref' s+(str 'ref')]]))
   ::
       %'browser_wait'
-    ?~  seed.c  (finish-error jid no-live)
     =/  ms  ?:(=(0 (num 'ms')) 3.000 (min 30.000 (num 'ms')))
     (run-action jid (pairs:enjs:format ~[['type' s+'wait'] ['ms' (numb:enjs:format ms)] ['selector' s+(str 'selector')] ['text' s+(str 'text')]]))
   ::
       %'browser_upload'
-    ?~  seed.c  (finish-error jid no-live)
     ?:  =('' (str 'name'))  (finish-error jid 'name is required')
     =/  f  (pairs:enjs:format ~[['name' s+(str 'name')] ['type' s+?:(=('' (str 'type')) 'text/plain' (str 'type'))] ['content' s+(str 'content')]])
     (run-action jid (pairs:enjs:format ~[['type' s+'upload'] ['ref' s+(str 'ref')] ['files' a+~[f]]]))
   ::
       %'browser_login'
-    ?~  seed.c  (finish-error jid no-live)
     ?~  page.c  (finish-error jid no-page)
     =/  origin=@t
       ?.  =('' (str 'origin'))  (norm-origin (str 'origin'))
@@ -811,10 +792,10 @@
 ++  tool-contexts
   |=  [eyre-id=@ta id=json args=(map @t json)]
   ^-  (quip card _state)
-  =/  act  =/(a (~(get by args) 'action') ?:(?=([~ %s *] a) p.u.a 'list'))
+  =/  act  =+((jstr args 'action') ?:(=('' -) 'list' -))
   =/  cid  (jstr args 'context')
-  =/  ok  |=(t=@t ^-((list card) (respond-json eyre-id 200 (text-result:mcp id t |))))
-  =/  bad  |=(t=@t ^-((list card) (respond-json eyre-id 200 (text-result:mcp id t &))))
+  =/  ok  |=(t=@t (reply eyre-id id t |))
+  =/  bad  |=(t=@t (reply eyre-id id t &))
   ?:  =('list' act)  [(ok (en:json:html contexts-json)) state]
   ?:  =('' cid)  [(bad 'context is required') state]
   ?:  =('close' act)
@@ -837,13 +818,7 @@
     [(ok (rap 3 'cleared cookies of ' cid ~)) state]
   ?:  =('export' act)  [(ok (en:json:html (export-json u.c))) state]
   ?:  =('configure' act)
-    =/  dev  device.u.c
-    =.  width.dev  ?:(=(0 (jnum args 'width')) width.dev (jnum args 'width'))
-    =.  height.dev  ?:(=(0 (jnum args 'height')) height.dev (jnum args 'height'))
-    =.  mobile.dev  (jbool args 'mobile' mobile.dev)
-    =.  user-agent.dev  ?:(=('' (jstr args 'user_agent')) user-agent.dev (jstr args 'user_agent'))
-    =.  locale.dev  ?:(=('' (jstr args 'locale')) locale.dev (jstr args 'locale'))
-    =.  timezone.dev  ?:(=('' (jstr args 'timezone')) timezone.dev (jstr args 'timezone'))
+    =/  dev  (json-device device.u.c (~(put by args) 'userAgent' (fall (~(get by args) 'user_agent') ~)))
     =/  tmo=(unit @dr)  ?:(=(0 (jnum args 'timeout')) timeout.u.c `(mul (jnum args 'timeout') ~s1))
     =/  prx=(unit @t)
       =/  v  (~(get by args) 'proxy')
@@ -857,10 +832,10 @@
 ++  tool-files
   |=  [eyre-id=@ta id=json cid=context-id args=(map @t json)]
   ^-  (quip card _state)
-  =/  act  =/(a (~(get by args) 'action') ?:(?=([~ %s *] a) p.u.a 'list'))
+  =/  act  =+((jstr args 'action') ?:(=('' -) 'list' -))
   =/  name  (jstr args 'name')
-  =/  ok  |=(t=@t ^-((list card) (respond-json eyre-id 200 (text-result:mcp id t |))))
-  =/  bad  |=(t=@t ^-((list card) (respond-json eyre-id 200 (text-result:mcp id t &))))
+  =/  ok  |=(t=@t (reply eyre-id id t |))
+  =/  bad  |=(t=@t (reply eyre-id id t &))
   =/  c  (~(get by contexts) cid)
   ?~  c  [(bad 'no such context') state]
   ?:  =('list' act)
@@ -899,18 +874,18 @@
   |=  [eyre-id=@ta id=json cid=context-id args=(map @t json)]
   ^-  (quip card _state)
   =/  c  (~(get by contexts) cid)
-  ?~  c  :_(state (respond-json eyre-id 200 (text-result:mcp id 'no such context' &)))
+  ?~  c  :_(state (reply eyre-id id 'no such context' &))
   =/  lines
     %+  turn  record.u.c
     |=  e=event
     (rap 3 (scot %da when.e) '  ' kind.e '  ' detail.e ~)
   =/  r  (paginate:mcp lines (max 1 (jnum args 'page')) page-bytes.policy)
   :_  state
-  (respond-json eyre-id 200 (text-result:mcp id (rap 3 (scot %ud total.r) ' events, page ' (scot %ud page.r) '/' (scot %ud pages.r) '\0a' body.r ~) |))
+  (reply eyre-id id (rap 3 (scot %ud total.r) ' events, page ' (scot %ud page.r) '/' (scot %ud pages.r) '\0a' body.r ~) |)
 ::  +begin-fetch: policy-check a URL and request it with Iris
 ::
 ++  begin-fetch
-  |=  [jid=@ud target=@t method=@t body=(unit octs) ctype=@t referrer=@t push=? extra=header-list:http]
+  |=  [jid=@ud target=@t method=@t body=(unit octs) ctype=@t referrer=@t extra=header-list:http]
   ^-  (quip card _state)
   =/  =job  (~(got by jobs) jid)
   =/  parts  (split:url target)
@@ -920,7 +895,7 @@
   ?:  (gth hops.job max-redirects.policy)  (finish-error jid 'too many redirects')
   =/  c  (~(got by contexts) cid.job)
   =/  =request:http  (make-request u.parts method body ctype referrer c & extra)
-  =.  jobs  (~(put by jobs) jid job(phase [%fetch (render:url u.parts) method body ctype referrer push now.bowl]))
+  =.  jobs  (~(put by jobs) jid job(phase [%fetch (render:url u.parts) method body ctype referrer now.bowl]))
   :_  state
   :~  [%pass /iris/job/(scot %ud jid)/(scot %ud hops.job) %arvo %i %request request [0 0]]
   ==
@@ -945,7 +920,7 @@
   |=  [p=parts:url method=@t body=(unit octs) ctype=@t referrer=@t c=context top=? extra=header-list:http]
   ^-  request:http
   =/  cookies  (header:ck (for-request:ck cookies.c p now.bowl &))
-  =/  ua  ?.(=('' user-agent.device.c) user-agent.device.c ?:(mobile.device.c mobile-ua user-agent.policy))
+  =/  ua  (effective-ua device.c)
   =/  lang  ?:(=('' locale.device.c) accept-language.policy (rap 3 locale.device.c ',' (end [3 2] locale.device.c) ';q=0.8' ~))
   =/  headers=header-list:http
     %+  murn
@@ -958,7 +933,7 @@
           ['content-type' ?~(body '' ctype)]
       ==
     |=([k=@t v=@t] ?:(=('' v) ~ `[k v]))
-  =/  verb=method:http  ?:(=('POST' method) %'POST' ?:(=('PUT' method) %'PUT' ?:(=('DELETE' method) %'DELETE' ?:(=('PATCH' method) %'PATCH' ?:(=('HEAD' method) %'HEAD' %'GET')))))
+  =/  verb=method:http  ?:(?=(?(%'POST' %'PUT' %'DELETE' %'PATCH' %'HEAD') method) method %'GET')
   =/  target  (render:url p)
   =/  final=@t
     ?~  proxy.c  target
@@ -1004,7 +979,6 @@
           ?:(keep body.phase.job ~)
           ?:(keep ctype.phase.job '')
           url.phase.job
-          push.phase.job
           ~
       ==
     ::  basic auth with a stored credential
@@ -1016,7 +990,7 @@
       =/  cred  (~(got by credentials) (origin:url parts))
       =/  token  (en:base64:mimes:html (as-octs:mimes:html (rap 3 username.cred ':' password.cred ~)))
       =.  jobs  (~(put by jobs) jid job(auth-retried &))
-      (begin-fetch jid url.phase.job method.phase.job body.phase.job ctype.phase.job referrer.phase.job push.phase.job ~[['authorization' (cat 3 'Basic ' token)]])
+      (begin-fetch jid url.phase.job method.phase.job body.phase.job ctype.phase.job referrer.phase.job ~[['authorization' (cat 3 'Basic ' token)]])
     =/  final-url  (render:url parts)
     =/  disposition  (cass-cord (fall (get-header:http 'content-disposition' headers) ''))
     =/  attachment  =("attachment" (scag 10 (trip disposition)))
@@ -1026,44 +1000,18 @@
               &(=('' ctype) ?=(^ (find "<html" (cass (trip (end [3 512] body))))))
       ==  ==
     =/  textual=?  &(!attachment (textual-mime ctype))
-    =/  c  (~(got by contexts) cid.job)
+    =/  c  (push-history (~(got by contexts) cid.job) final-url push.job)
     ?.  html
-      =.  c  (push-history c final-url push.phase.job)
-      ?:  textual
-        =/  =page  [final-url final-url status hops.job %text ~ body 0 now.bowl | ~ ~ '']
-        =.  c  (drop-seed c(page `page, last now.bowl))
-        =.  contexts  (~(put by contexts) cid.job c)
-        =/  r  (page-text:mcp body 1 page-bytes.policy)
-        (finish-text jid (rap 3 (page-header page) 'Text page 1/' (scot %ud pages.r) ?:((gth pages.r 1) ' (browser_text page=2 for more)' '') '\0a---\0a' body.r ~) |)
-      ::  a download: keep the bytes in the context
-      =/  name  (file-name disposition parts)
-      =/  size  (met 3 raw)
-      =/  mime  ?:(=('' ctype) 'application/octet-stream' ctype)
-      =/  stored=?  (lte (add file-bytes.c size) max-files.policy)
-      =?  files.c  stored  (~(put by files.c) name [mime size [size raw] now.bowl final-url])
-      =?  file-bytes.c  stored  (add file-bytes.c size)
-      =/  summary
-        %+  rap  3
-        :~  'Downloaded '  name  ' ('  mime  ', '  (scot %ud size)  ' bytes'
-            ?:(=(size max-body.policy) ', truncated at max-body' '')  ')'
-            ?:  stored
-              (rap 3 '. Read it with browser_files action=read name=' name ', or GET /browser/files/' cid.job '/' name ~)
-            '. Not kept: the context\'s file storage is full; delete files with browser_files.'
-        ==
-      =/  =page  [final-url name status hops.job %binary ~ summary 0 now.bowl | ~ ~ '']
-      =.  c  (drop-seed c(page `page, last now.bowl))
-      =.  contexts  (~(put by contexts) cid.job c)
-      =.  state  (note cid.job 'download' (rap 3 name ' ' (scot %ud size) 'B' ~))
-      (finish-text jid (rap 3 (page-header page) summary ~) |)
+      ?:  textual  (finish-text-page jid c final-url status body)
+      (finish-download jid c final-url status raw ctype disposition parts)
     ::  html: load into a runtime
-    =.  c  (push-history c final-url push.phase.job)
     =/  page-parts  (need (split:url final-url))
     =/  opts  (load-options c page-parts job)
     =^  base  state  get-pristine
     =.  c  (drop-seed c)
     =.  c  c(page ~, seed `base, last now.bowl)
     =.  contexts  (~(put by contexts) cid.job c)
-    =.  jobs  (~(put by jobs) jid job(phase [%run %load ~ push.phase.job], args (~(put by args.job) '__status' (numb:enjs:format status))))
+    =.  jobs  (~(put by jobs) jid job(phase [%run %load ~], status status))
     (run-script jid %load (load:js body final-url opts))
   ::
       %run
@@ -1075,8 +1023,41 @@
     =?  state  &(cache-scripts.policy =(200 status) |(=('script' kind.sub) =('stylesheet' kind.sub)))
       (cache-put url.sub ctype body)
     =.  jobs  (~(put by jobs) jid job(phase phase.job(sub ~)))
-    (resume jid ~[octs+(tem:js (sub-json status headers body url.sub))])
+    (resume jid ~[octs+(as-octs:mimes:html (sub-json status headers body url.sub))])
   ==
+::  +finish-text-page: a non-html text response is the page
+::
+++  finish-text-page
+  |=  [jid=@ud c=context final-url=@t status=@ud body=@t]
+  ^-  (quip card _state)
+  =/  =job  (~(got by jobs) jid)
+  =/  =page  [final-url final-url status hops.job %text ~ body 0 now.bowl | ~ ~ '']
+  =.  contexts  (~(put by contexts) cid.job (drop-seed c(page `page, last now.bowl)))
+  (finish-text jid (render-text page body 1) |)
+::  +finish-download: keep an attachment or binary body in the context
+::
+++  finish-download
+  |=  [jid=@ud c=context final-url=@t status=@ud raw=@t ctype=@t disposition=@t parts=parts:url]
+  ^-  (quip card _state)
+  =/  =job  (~(got by jobs) jid)
+  =/  name  (file-name disposition parts)
+  =/  size  (met 3 raw)
+  =/  mime  ?:(=('' ctype) 'application/octet-stream' ctype)
+  =/  stored=?  (lte (add file-bytes.c size) max-files.policy)
+  =?  files.c  stored  (~(put by files.c) name [mime size [size raw] now.bowl final-url])
+  =?  file-bytes.c  stored  (add file-bytes.c size)
+  =/  summary
+    %+  rap  3
+    :~  'Downloaded '  name  ' ('  mime  ', '  (scot %ud size)  ' bytes'
+        ?:(=(size max-body.policy) ', truncated at max-body' '')  ')'
+        ?:  stored
+          (rap 3 '. Read it with browser_files action=read name=' name ', or GET /browser/files/' cid.job '/' name ~)
+        '. Not kept: the context\'s file storage is full; delete files with browser_files.'
+    ==
+  =/  =page  [final-url name status hops.job %binary ~ summary 0 now.bowl | ~ ~ '']
+  =.  contexts  (~(put by contexts) cid.job (drop-seed c(page `page, last now.bowl)))
+  =.  state  (note cid.job 'download' (rap 3 name ' ' (scot %ud size) 'B' ~))
+  (finish-text jid (rap 3 (page-header page) summary ~) |)
 ++  sub-json
   |=  [status=@ud headers=header-list:http body=@t url=@t]
   ^-  @t
@@ -1086,13 +1067,15 @@
     =/  lk  (cass-cord k)
     ?:  =('set-cookie' lk)  ~
     `[lk `json`s+v]
-  %-  en:json:html
-  %-  pairs:enjs:format
-  :~  ['status' (numb:enjs:format status)]
-      ['headers' (pairs:enjs:format visible)]
-      ['body' s+body]
-      ['url' s+url]
-  ==
+  ::  metadata as JSON, then the body untouched after a newline
+  =/  meta
+    %-  en:json:html
+    %-  pairs:enjs:format
+    :~  ['status' (numb:enjs:format status)]
+        ['headers' (pairs:enjs:format visible)]
+        ['url' s+url]
+    ==
+  (rap 3 meta '\0a' body ~)
 ++  file-name
   |=  [disposition=@t p=parts:url]
   ^-  @t
@@ -1158,13 +1141,8 @@
   ^+  state
   =/  c  (~(get by contexts) cid)
   ?~  c  state
-  =/  sets  (skim headers |=([k=@t v=@t] =('set-cookie' (cass-cord k))))
-  =.  cookies.u.c
-    %+  roll  sets
-    |=  [[k=@t v=@t] jar=_cookies.u.c]
-    =/  got  (parse:ck v parts now.bowl)
-    ?~  got  jar
-    (store:ck jar u.got now.bowl)
+  =/  sets  (murn headers |=([k=@t v=@t] ?:(=('set-cookie' (cass-cord k)) `v ~)))
+  =.  cookies.u.c  (absorb:ck cookies.u.c sets parts now.bowl)
   state(contexts (~(put by contexts) cid u.c))
 ++  push-history
   |=  [c=context target=@t push=?]
@@ -1186,14 +1164,14 @@
       ['localStorage' o+(~(run by local-storage.c) |=(v=@t `json`s+v))]
       ['sessionStorage' o+(~(run by session-storage.c) |=(v=@t `json`s+v))]
       ['seed' (numb:enjs:format (end [0 31] (shax (jam [eny.bowl now.bowl]))))]
-      ['now' (numb:enjs:format (unix-ms now.bowl))]
+      ['now' (time:enjs:format now.bowl)]
       ['referrer' s+referrer]
       :-  'device'
       %-  pairs:enjs:format
       :~  ['width' (numb:enjs:format width.dev)]
           ['height' (numb:enjs:format height.dev)]
           ['mobile' b+mobile.dev]
-          ['userAgent' s+?.(=('' user-agent.dev) user-agent.dev ?:(mobile.dev mobile-ua user-agent.policy))]
+          ['userAgent' s+(effective-ua dev)]
           ['language' s+?:(=('' locale.dev) 'en-US' locale.dev)]
           ['timezone' s+timezone.dev]
       ==
@@ -1223,8 +1201,7 @@
   =/  =job  (~(got by jobs) jid)
   =/  c  (~(got by contexts) cid.job)
   ?~  seed.c  (finish-error jid 'no live runtime')
-  =/  push  ?:(?=(%run -.phase.job) push.phase.job ?:(?=(%fetch -.phase.job) push.phase.job &))
-  =.  jobs  (~(put by jobs) jid job(phase [%run kind ~ push]))
+  =.  jobs  (~(put by jobs) jid job(phase [%run kind ~]))
   =/  out  (step:js &+script u.seed.c js-gap.policy)
   (advance jid out)
 ++  run-action
@@ -1280,7 +1257,7 @@
       ?:  (gth subrequests.job (mul 4 max-subrequests.policy))
         =.  contexts  (~(put by contexts) cid.job (drop-seed c))
         (finish-error jid 'the page kept requesting blocked resources')
-      (resume jid ~[octs+(tem:js (en:json:html (pairs:enjs:format ~[['error' s+why]])))])
+      (resume jid ~[octs+(as-octs:mimes:html (en:json:html (pairs:enjs:format ~[['error' s+why]])))])
     =/  parts  (split:url target)
     ?~  parts  (refuse 'only absolute http(s) URLs can be fetched')
     =/  why  (refused-sub u.parts kind)
@@ -1291,7 +1268,7 @@
     ?^  hit
       =.  jobs  (~(put by jobs) jid job(subrequests +(subrequests.job)))
       =.  state  (note cid.job 'cached' (rap 3 kind ' ' target ~))
-      (resume jid ~[octs+(tem:js (sub-json 200 ~[['content-type' mime.u.hit]] body.u.hit target))])
+      (resume jid ~[octs+(as-octs:mimes:html (sub-json 200 ~[['content-type' mime.u.hit]] body.u.hit target))])
     =/  hdrs=(map @t json)
       =/  j  (de:json:html hdr)
       ?:(?=([~ %o *] j) p.u.j ~)
@@ -1302,10 +1279,8 @@
       ?:  ?=(?(%'cookie' %'host' %'content-length' %'accept-encoding' %'user-agent' %'referer') lk)  ~
       ?.  ?=([%s *] v)  ~
       `[lk p.v]
-    =/  referer=@t
-      =/  r  (~(get by hdrs) 'referer')
-      ?:(?=([~ %s *] r) p.u.r ?~(page.c '' url.u.page.c))
-    =/  body=(unit octs)  ?:(=('' bod) ~ `(tem:js bod))
+    =/  referer=@t  =+((jstr hdrs 'referer') ?:(=('' -) ?~(page.c '' url.u.page.c) -))
+    =/  body=(unit octs)  ?:(=('' bod) ~ `(as-octs:mimes:html bod))
     =/  =request:http  (make-request u.parts method body '' referer c | extra)
     =/  ph  phase.job
     ?>  ?=(%run -.ph)
@@ -1348,12 +1323,7 @@
   =/  c  (~(got by contexts) cid)
   =/  page-url  (jstr m 'url')
   =/  parts  (split:url page-url)
-  =?  cookies.c  ?=(^ parts)
-    %+  roll  (jlines m 'cookies')
-    |=  [raw=@t jar=_cookies.c]
-    =/  got  (parse:ck raw u.parts now.bowl)
-    ?~  got  jar
-    (store:ck jar u.got now.bowl)
+  =?  cookies.c  ?=(^ parts)  (absorb:ck cookies.c (jlines m 'cookies') u.parts now.bowl)
   =?  local-storage.c  ?=(^ (jmap m 'localStorage'))  (need (jmap m 'localStorage'))
   =?  session-storage.c  ?=(^ (jmap m 'sessionStorage'))  (need (jmap m 'sessionStorage'))
   state(contexts (~(put by contexts) cid c))
@@ -1375,6 +1345,16 @@
     ?.  ?=([%o *] j)  ~
     `(rap 3 (jstr p.j 'type') ': ' (jstr p.j 'message') (jstr p.j 'url') ~)
   [console dialogs]
+::  +nav-fetch: a navigation the runtime asked for becomes a fetch
+::
+++  nav-fetch
+  |=  [jid=@ud n=(map @t json) referrer=@t]
+  ^-  (quip card _state)
+  %-  begin-fetch
+  :*  jid  (jstr n 'url')  (jstr n 'method')
+      ?:(=('' (jstr n 'body')) ~ `(as-octs:mimes:html (jstr n 'body')))
+      (jstr n 'contentType')  referrer  ~
+  ==
 ::  +finish-load: the runtime finished loading a page
 ::
 ++  finish-load
@@ -1387,31 +1367,21 @@
   ?.  =([~ %b &] (~(get by m) 'ok'))  (finish-error jid (cat 3 'load failed: ' (jstr m 'error')))
   =.  state  (absorb-result cid.job m)
   =/  c  (~(got by contexts) cid.job)
-  =/  ph  phase.job
-  ?>  ?=(%run -.ph)
-  =/  nav  (~(get by m) 'navigate')
-  ?:  &(?=([~ %o *] nav) (lth hops.job max-redirects.policy))
-    =/  n  p.u.nav
-    =/  next  (jstr n 'url')
-    ?.  =('' next)
-      =.  jobs  (~(put by jobs) jid job(hops +(hops.job)))
-      =.  state  (note cid.job 'redirect' (rap 3 (jstr n 'reason') ' ' next ~))
-      %-  begin-fetch
-      :*  jid  next  (jstr n 'method')
-          ?:(=('' (jstr n 'body')) ~ `(tem:js (jstr n 'body')))
-          (jstr n 'contentType')  (jstr m 'url')  push.ph  ~
-      ==
+  ::  a script-driven redirect becomes another navigation
+  =/  nav  (jobj m 'navigate')
+  ?.  &(!=('' (jstr nav 'url')) (lth hops.job max-redirects.policy))
     (store-and-reply jid c m)
-  (store-and-reply jid c m)
+  =.  jobs  (~(put by jobs) jid job(hops +(hops.job)))
+  =.  state  (note cid.job 'redirect' (rap 3 (jstr nav 'reason') ' ' (jstr nav 'url') ~))
+  (nav-fetch jid nav (jstr m 'url'))
 ++  store-and-reply
   |=  [jid=@ud c=context m=(map @t json)]
   ^-  (quip card _state)
   =/  =job  (~(got by jobs) jid)
   =/  [console=(list @t) dialogs=(list @t)]  (diagnostics m)
-  =/  status  (jnum args.job '__status')
   =/  stats  (jobj m 'stats')
   =/  =page
-    :*  (jstr m 'url')  (jstr m 'title')  status  hops.job  %html
+    :*  (jstr m 'url')  (jstr m 'title')  status.job  hops.job  %html
         (jlines m 'lines')  ''  (jnum m 'interactive')  now.bowl  js.job  console  dialogs  (jstr m 'description')
     ==
   =.  c  c(page `page, last now.bowl)
@@ -1447,15 +1417,11 @@
     ?:  ?=([~ %n *] (~(get by n) 'history'))
       (finish-error jid 'the page requested history navigation; use browser_back')
     ?:  =('' next)  (finish-error jid 'the page requested an unsupported navigation')
-    =.  jobs  (~(put by jobs) jid job(hops 0))
-    %-  begin-fetch
-    :*  jid  next  (jstr n 'method')
-        ?:(=('' (jstr n 'body')) ~ `(tem:js (jstr n 'body')))
-        (jstr n 'contentType')  (jstr m 'url')  &  ~
-    ==
+    =.  jobs  (~(put by jobs) jid job(hops 0, push &))
+    (nav-fetch jid n (jstr m 'url'))
   =/  [console=(list @t) dialogs=(list @t)]  (diagnostics m)
   =/  old  (fall page.c *page)
-  =/  =page  old(url (jstr m 'url'), title (jstr m 'title'), lines (jlines m 'lines'), interactive (jnum m 'interactive'), console console, dialogs dialogs)
+  =/  =page  old(url (jstr m 'url'), title (jstr m 'title'), lines (jlines m 'lines'), interactive (jnum m 'interactive'), console console, dialogs dialogs, text '')
   =.  contexts  (~(put by contexts) cid.job c(page `page, last now.bowl))
   =/  summary
     ?:  =('browser_wait' tool.job)
@@ -1484,9 +1450,12 @@
     (finish-text jid (render-page c page pg ~) |)
   ::
       %'browser_text'
-    =/  r  (page-text:mcp (jstr m 'text') pg page-bytes.policy)
+    =/  txt  (jstr m 'text')
     =/  old  (fall page.c *page)
-    (finish-text jid (rap 3 (page-header old) 'Text page ' (scot %ud page.r) '/' (scot %ud pages.r) ?:((lth page.r pages.r) (rap 3 ' (call browser_text with page=' (scot %ud +(page.r)) ' for more)' ~) '') '\0a---\0a' body.r ~) |)
+    ::  whole-page text is cached on the page for later result pages
+    =?  contexts  &(?=(^ page.c) =('' (jstr args.job 'ref')) =('' (jstr args.job 'selector')))
+      (~(put by contexts) cid.job c(page `u.page.c(text txt)))
+    (finish-text jid (render-text old txt pg) |)
   ::
       %'browser_html'
     =/  r  (page-text:mcp (jstr m 'html') pg page-bytes.policy)
@@ -1520,6 +1489,15 @@
   ==
 ::  rendering
 ::
+++  render-text
+  |=  [p=page txt=@t pg=@ud]
+  ^-  @t
+  =/  r  (page-text:mcp txt pg page-bytes.policy)
+  %+  rap  3
+  :~  (page-header p)  'Text page '  (scot %ud page.r)  '/'  (scot %ud pages.r)
+      ?:((lth page.r pages.r) (rap 3 ' (call browser_text with page=' (scot %ud +(page.r)) ' for more)' ~) '')
+      '\0a---\0a'  body.r
+  ==
 ++  page-header
   |=  p=page
   ^-  @t
@@ -1562,7 +1540,7 @@
   ?~  mjob  `state
   =/  =job  u.mjob
   =.  jobs  (~(del by jobs) jid)
-  =/  cards  (respond-json eyre-id.job 200 (text-result:mcp rpc-id.job text is-error))
+  =/  cards  (reply eyre-id.job rpc-id.job text is-error)
   ?.  =(`jid (~(get by active) cid.job))  [cards state]
   =.  active  (~(del by active) cid.job)
   =/  waiting  (fall (~(get by queue) cid.job) ~)

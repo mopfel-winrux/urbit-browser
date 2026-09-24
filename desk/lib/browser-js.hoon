@@ -44,12 +44,6 @@
     ?:  =(`@dr`0 gap)  (run:wasm in sed hint)
     ~>(%jinx.gap (run:wasm in sed hint))
   [yil sed]
-::  +tem: cord to octs
-::
-++  tem
-  |=  c=cord
-  ^-  octs
-  [(met 3 c) c]
 ::  wasm imports
 ::
 ++  imports
@@ -147,7 +141,7 @@
     ?:  (gte argc-w 5)  (get-js-string (add argv-u 32))
     (return:m 'fetch')
   ;<  res=(pole lv)  try:m
-    (call-ext %fetch ~[octs+(tem url) octs+(tem method) octs+(tem headers) octs+(tem body) octs+(tem kind)])
+    (call-ext %fetch (turn ~[url method headers body kind] |=(c=cord `lv`octs+(as-octs:mimes:html c))))
   ?>  ?=([[%octs p=octs] ~] res)
   (new-string ctx-u q.p.res)
 ++  host-log
@@ -351,13 +345,10 @@
   |-  ^-  form:m
   ;<  *  try:m  pump
   ?:  (gte i 60)  (return:m ~)
-  ;<  r=(each cord cord)  try:m  (eval-string '__browser.tick(25)')
-  ?:  ?=(%| -.r)  (return:m ~)
-  =/  jon  (de:json:html p.r)
-  =/  more=?
-    ?~  jon  |
-    ?.  ?=([%o *] u.jon)  |
-    =([~ %b &] (~(get by p.u.jon) 'more'))
+  ;<  res-u=@  try:m  (js-eval '__browser.tick(25)')
+  ;<  more-d=@rd  try:m  (call-1 'QTS_GetFloat64' ctx-u.a res-u ~)
+  ;<  *  try:m  (call 'QTS_FreeValuePointer' ctx-u.a res-u ~)
+  =/  more=?  !=(0 (abs:si (fall (toi:rd more-d) --0)))
   ;<  *  try:m  pump
   ;<  pending=@  try:m  (call-1 'QTS_IsJobPending' run-u.a ~)
   ?:  &(!more =(0 pending))  (return:m ~)
@@ -368,7 +359,7 @@
   |=  msg=cord
   =/  m  runnable:wasm
   ^-  form:m
-  (return:m ~[i32+0 octs+(tem msg)])
+  (return:m ~[i32+0 octs+(as-octs:mimes:html msg)])
 ::  +init: create the runtime and load the bundle (a reusable pristine seed)
 ::
 ++  init
@@ -390,35 +381,14 @@
   ?^  err  (fail (cat 3 'runtime failed to load: ' u.err))
   ;<  *  try:m  (call 'QTS_FreeValuePointer' ctx-u res-u ~)
   (return:m ~[i32+1])
-::  +boot: create the runtime, load the bundle, then load a page
-::
-++  boot
-  |=  [now=@da html=cord url=cord opts=cord]
-  =/  m  runnable:wasm
-  ^-  form:m
-  =,  arr
-  ;<  run-u=@  try:m  (call-1 'QTS_NewRuntime' ~)
-  ;<  *        try:m  (call 'QTS_RuntimeSetMemoryLimit' run-u (mul 384 (bex 20)) ~)
-  ;<  *        try:m  (call 'QTS_RuntimeSetMaxStackSize' run-u (mul 2 (bex 20)) ~)
-  ;<  ctx-u=@  try:m  (call-1 'QTS_NewContext' run-u 0 ~)
-  ;<  fil-u=@  try:m  (malloc-cord 'browser-runtime.js')
-  ;<  ~        try:m  (set-acc !>(`acc`[run-u ctx-u fil-u now]))
-  ;<  glob-u=@  try:m  (call-1 'QTS_GetGlobalObject' ctx-u ~)
-  ;<  ~  try:m  (register-function '__host_fetch' 1 glob-u)
-  ;<  ~  try:m  (register-function '__host_log' 2 glob-u)
-  ;<  res-u=@          try:m  (js-eval runtime-js)
-  ;<  err=(unit cord)  try:m  (mayb-error res-u)
-  ?^  err  (fail (cat 3 'runtime failed to load: ' u.err))
-  ;<  *  try:m  (call 'QTS_FreeValuePointer' ctx-u res-u ~)
-  (load html url opts)
 ::  +load: parse a page in the existing runtime and settle it
 ::
 ++  load
-  |=  [html=cord url=cord opts=cord]
+  |=  [markup=cord url=cord opts=cord]
   =/  m  runnable:wasm
   ^-  form:m
   =,  arr
-  ;<  ~  try:m  (set-global '__arg0' html)
+  ;<  ~  try:m  (set-global '__arg0' markup)
   ;<  ~  try:m  (set-global '__arg1' url)
   ;<  ~  try:m  (set-global '__arg2' opts)
   ;<  r=(each cord cord)  try:m
@@ -428,7 +398,7 @@
   ;<  ~  try:m  settle
   ;<  s=(each cord cord)  try:m  (eval-string '__browser.result("{}")')
   ?:  ?=(%| -.s)  (fail (cat 3 'result failed: ' p.s))
-  (return:m ~[i32+1 octs+(tem p.s)])
+  (return:m ~[i32+1 octs+(as-octs:mimes:html p.s)])
 ::  +act: perform an action, settle, and snapshot
 ::
 ++  act
@@ -442,7 +412,7 @@
   ;<  ~  try:m  settle
   ;<  s=(each cord cord)  try:m  (eval-string '__browser.result("{}")')
   ?:  ?=(%| -.s)  (fail (cat 3 'result failed: ' p.s))
-  (return:m ~[i32+1 octs+(tem p.r) octs+(tem p.s)])
+  (return:m ~[i32+1 octs+(as-octs:mimes:html p.r) octs+(as-octs:mimes:html p.s)])
 ::  +query: call a read-only __browser method with two string arguments
 ::
 ++  query
@@ -455,5 +425,5 @@
   ;<  r=(each cord cord)  try:m
     (eval-string (rap 3 '__browser.' method '(globalThis.__arg0, globalThis.__arg1)' ~))
   ?:  ?=(%| -.r)  (fail (cat 3 'query failed: ' p.r))
-  (return:m ~[i32+1 octs+(tem p.r)])
+  (return:m ~[i32+1 octs+(as-octs:mimes:html p.r)])
 --

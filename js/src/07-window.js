@@ -11,7 +11,7 @@ class DocumentImpl extends NodeImpl {
   get head() { const h = this.documentElement; return h ? (h.children.find(c => c.localName === 'head') || null) : null; }
   get body() { const h = this.documentElement; return h ? (h.children.find(c => c.localName === 'body' || c.localName === 'frameset') || null) : null; }
   set body(v) { const old = this.body; if (old) old.replaceWith(v); else this.documentElement.appendChild(v); }
-  get title() { const t = R.querySelector(this, 'title'); return t ? t.textContent.replace(/\s+/g, ' ').trim() : ''; }
+  get title() { const t = R.querySelector(this, 'title'); return t ? R.collapse(t.textContent) : ''; }
   set title(v) { let t = R.querySelector(this, 'title'); if (!t) { t = this.createElement('title'); (this.head || this.documentElement || this).appendChild(t); } t.textContent = String(v); }
   get URL() { return this._isMain ? R.location.href : (this._url || 'about:blank'); }
   get documentURI() { return this.URL; }
@@ -44,9 +44,6 @@ class DocumentImpl extends NodeImpl {
   get anchors() { return R.collect(this, e => e.localName === 'a' && 'name' in e._attrs); }
   get scripts() { return R.collect(this, e => e.localName === 'script'); }
   get embeds() { return R.collect(this, e => e.localName === 'embed'); } get plugins() { return this.embeds; }
-  get children() { return this.childNodes.filter(c => c.nodeType === 1); }
-  get childElementCount() { return this.children.length; }
-  get firstElementChild() { return this.children[0] || null; } get lastElementChild() { const c = this.children; return c[c.length - 1] || null; }
   _createElementRaw(tag, ns) {
     if (ns === SVG_NS) return new SVGElementImpl(this, tag, ns);
     if (ns && ns !== 'http://www.w3.org/1999/xhtml') return new ElementImpl(this, tag, ns);
@@ -71,12 +68,19 @@ class DocumentImpl extends NodeImpl {
   createExpression() { throw new Error('XPath is not supported'); } evaluate() { throw new Error('XPath is not supported'); }
   importNode(n, deep) { const c = n.cloneNode(!!deep); adoptTree(c, this); return c; }
   adoptNode(n) { if (n.parentNode) n.parentNode.removeChild(n); adoptTree(n, this); return n; }
-  getElementById(id) { id = String(id); return findFirst(this, e => e._attrs.id === id); }
+  _index() {
+    if (this._idxGen === R.cssGeneration && this._ids) return;
+    const ids = new Map(), labels = new Map();
+    R.walk(this, n => {
+      if (n.nodeType !== 1) return;
+      const id = n._attrs.id; if (id !== undefined && !ids.has(id)) ids.set(id, n);
+      if (n.localName === 'label') { const f = n._attrs.for; if (f !== undefined) { const l = labels.get('#' + f) || []; l.push(n); labels.set('#' + f, l); } else { const c = findFirst(n, R.isLabelable); if (c) { const l = labels.get(c) || []; l.push(n); labels.set(c, l); } } }
+    });
+    this._ids = ids; this._labels = labels; this._idxGen = R.cssGeneration;
+  }
+  getElementById(id) { this._index(); return this._ids.get(String(id)) || null; }
+  _labelsFor(el) { this._index(); const byFor = el._attrs.id !== undefined ? (this._labels.get('#' + el._attrs.id) || []) : []; const wrapping = this._labels.get(el) || []; return byFor.concat(wrapping); }
   getElementsByName(n) { n = String(n); return R.collect(this, e => e._attrs.name === n); }
-  getElementsByTagName(t) { t = String(t); const l = t.toLowerCase(); return R.collect(this, e => t === '*' || e.localName === l); }
-  getElementsByTagNameNS(ns, t) { return this.getElementsByTagName(t); }
-  getElementsByClassName(c) { const cs = String(c).split(/\s+/).filter(Boolean); return R.collect(this, e => { const l = (e._attrs.class || '').split(/\s+/); return cs.every(x => l.includes(x)); }); }
-  querySelector(s) { return R.querySelector(this, s); } querySelectorAll(s) { return R.querySelectorAll(this, s); }
   elementFromPoint() { return null; } elementsFromPoint() { return []; } caretRangeFromPoint() { return null; } caretPositionFromPoint() { return null; }
   getSelection() { return R.window.getSelection(); }
   execCommand() { return false; } queryCommandSupported() { return false; } queryCommandEnabled() { return false; } queryCommandState() { return false; } queryCommandValue() { return ''; }
@@ -113,9 +117,10 @@ class RangeImpl {
 class TreeWalkerImpl {
   constructor(root, whatToShow, filter) { this.root = root; this.currentNode = root; this.whatToShow = whatToShow === undefined ? 0xffffffff : whatToShow; this.filter = filter || null; this._referenceNode = root; this._pointerBeforeReferenceNode = true; }
   _accept(n) { const mask = n.nodeType === 1 ? 1 : n.nodeType === 3 ? 4 : n.nodeType === 8 ? 128 : n.nodeType === 9 ? 256 : n.nodeType === 11 ? 1024 : 0; if (!(this.whatToShow & mask)) return 3; if (!this.filter) return 1; const f = typeof this.filter === 'function' ? this.filter : this.filter.acceptNode; const r = f ? f.call(this.filter, n) : 1; return r === undefined ? 1 : r; }
-  _all() { const out = []; R.walk(this.root, n => { out.push(n); }); return out; }
-  nextNode() { const all = this._all(); let i = all.indexOf(this.currentNode); for (i = i + 1; i < all.length; i++) if (this._accept(all[i]) === 1) { this.currentNode = all[i]; return all[i]; } return null; }
-  previousNode() { const all = this._all(); let i = all.indexOf(this.currentNode); if (i < 0) i = all.length; for (i = i - 1; i >= 0; i--) if (this._accept(all[i]) === 1) { this.currentNode = all[i]; return all[i]; } return null; }
+  _following(n) { if (n.childNodes.length) return n.childNodes[0]; while (n && n !== this.root) { if (n.nextSibling) return n.nextSibling; n = n.parentNode; } return null; }
+  _preceding(n) { if (n === this.root) return null; let p = n.previousSibling; if (!p) return n.parentNode === this.root ? null : n.parentNode; while (p.childNodes.length) p = p.childNodes[p.childNodes.length - 1]; return p; }
+  nextNode() { let n = this._following(this.currentNode); while (n) { if (this._accept(n) === 1) { this.currentNode = n; return n; } n = this._following(n); } return null; }
+  previousNode() { let n = this._preceding(this.currentNode); while (n) { if (this._accept(n) === 1) { this.currentNode = n; return n; } n = this._preceding(n); } return null; }
   parentNode() { let n = this.currentNode.parentNode; while (n && n !== this.root.parentNode) { if (this._accept(n) === 1) { this.currentNode = n; return n; } n = n.parentNode; } return null; }
   firstChild() { for (const c of this.currentNode.childNodes) if (this._accept(c) === 1) { this.currentNode = c; return c; } return null; }
   lastChild() { const cs = this.currentNode.childNodes; for (let i = cs.length - 1; i >= 0; i--) if (this._accept(cs[i]) === 1) { this.currentNode = cs[i]; return cs[i]; } return null; }
@@ -124,6 +129,8 @@ class TreeWalkerImpl {
   get referenceNode() { return this.currentNode; }
   detach() {}
 }
+R.mixinParentNode(DocumentImpl);
+R.labelsFor = el => { const d = el.ownerDocument; return d && d._isMain ? d._labelsFor(el) : R.collect(d || el.getRootNode(), e => e.localName === 'label' && ((el._attrs.id && e._attrs.for === el._attrs.id) || (!e._attrs.for && e.contains(el)))); };
 R.classes.Document = DocumentImpl; R.classes.HTMLDocument = DocumentImpl; R.classes.XMLDocument = DocumentImpl; R.classes.Range = RangeImpl; R.classes.TreeWalker = TreeWalkerImpl; R.classes.NodeIterator = TreeWalkerImpl;
 
 // ------------------------------------------------------------ Visibility
@@ -132,8 +139,7 @@ R.base = () => R.baseHref || R.location.href;
 R.isVisible = el => {
   let n = el;
   while (n && n.nodeType === 1) {
-    if (n.localName === 'template' || n.localName === 'head') return false;
-    if (n.localName === 'noscript' && R.opts.js) return false;
+    if (n.localName === 'template' || n.localName === 'head' || n.localName === 'noscript') return false;
     if (n.localName === 'input' && n.type === 'hidden') return false;
     if (R.cssHidden(n)) return false;
     if (n.localName === 'dialog' && !('open' in n._attrs)) return false;
@@ -267,7 +273,10 @@ function bodyToString(body, headers) {
 function hostFetch(url, method, headers, body, kind) {
   if (!host.fetch) throw new TypeError('Failed to fetch: no network access');
   const raw = host.fetch(url, method, JSON.stringify(headers instanceof HeadersImpl ? headers._toObject() : (headers || {})), body == null ? '' : String(body), kind || 'fetch');
-  let r; try { r = JSON.parse(raw); } catch (e) { throw new TypeError('Failed to fetch: bad host response'); }
+  let r;
+  const nl = raw.indexOf('\n');
+  try { r = JSON.parse(nl < 0 ? raw : raw.slice(0, nl)); } catch (e) { throw new TypeError('Failed to fetch: bad host response'); }
+  if (nl >= 0) r.body = raw.slice(nl + 1);
   if (r.error) throw new TypeError('Failed to fetch: ' + r.error);
   R.subrequests = (R.subrequests || 0) + 1;
   return r;

@@ -30,6 +30,7 @@ const CLOSE_ON_OPEN = {
 const SVG_NS = 'http://www.w3.org/2000/svg', MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const SVG_CASE = { altglyph: 'altGlyph', altglyphdef: 'altGlyphDef', altglyphitem: 'altGlyphItem', animatecolor: 'animateColor', animatemotion: 'animateMotion', animatetransform: 'animateTransform', clippath: 'clipPath', feblend: 'feBlend', fecolormatrix: 'feColorMatrix', fecomponenttransfer: 'feComponentTransfer', fecomposite: 'feComposite', feconvolvematrix: 'feConvolveMatrix', fediffuselighting: 'feDiffuseLighting', fedisplacementmap: 'feDisplacementMap', fedistantlight: 'feDistantLight', feflood: 'feFlood', fefunca: 'feFuncA', fefuncb: 'feFuncB', fefuncg: 'feFuncG', fefuncr: 'feFuncR', fegaussianblur: 'feGaussianBlur', feimage: 'feImage', femerge: 'feMerge', femergenode: 'feMergeNode', femorphology: 'feMorphology', feoffset: 'feOffset', fepointlight: 'fePointLight', fespecularlighting: 'feSpecularLighting', fespotlight: 'feSpotLight', fetile: 'feTile', feturbulence: 'feTurbulence', foreignobject: 'foreignObject', glyphref: 'glyphRef', lineargradient: 'linearGradient', radialgradient: 'radialGradient', textpath: 'textPath' };
 
+const END_TAG_RE = /([a-zA-Z][^\s/>]*)/y;
 class Parser {
   constructor(doc, opts) {
     this.doc = doc; this.opts = opts || {};
@@ -39,7 +40,7 @@ class Parser {
     this.html = null; this.head = null; this.body = null;
     this.input = ''; this.pos = 0;
     this.scriptRunner = this.opts.scriptRunner || null;   // (scriptEl) => void, may call document.write
-    this.deferred = []; this.scriptsSeen = 0;
+    this.deferred = [];
     this.formPtr = null;
     if (this.fragment && this.opts.context) {
       const ctx = this.opts.context.localName;
@@ -53,7 +54,6 @@ class Parser {
   parse(input) {
     this.input = input; this.pos = 0;
     if (this.rawContext) { this.appendText(this.rawContext === 'script' || this.rawContext === 'style' ? input : decodeEntities(input)); return; }
-    const inp = () => this.input;
     while (this.pos < this.input.length) {
       const s = this.input;
       const lt = s.indexOf('<', this.pos);
@@ -67,10 +67,12 @@ class Parser {
       }
       if (c === 63) { let end = s.indexOf('>', lt); if (end < 0) end = s.length; this.pos = end + 1; continue; } // <?
       if (c === 47) { // </
-        const m = /^<\/([a-zA-Z][^\s/>]*)\s*[^>]*>/.exec(s.slice(lt, lt + 200)) || /^<\/([a-zA-Z][^\s/>]*)/.exec(s.slice(lt, lt + 200));
-        if (!m) { let end = s.indexOf('>', lt); if (end < 0) end = s.length; this.pos = end + 1; continue; }
+        END_TAG_RE.lastIndex = lt + 2;
+        const m = END_TAG_RE.exec(s);
         let end = s.indexOf('>', lt); if (end < 0) end = s.length;
-        this.pos = end + 1; this.endTag(m[1].toLowerCase()); continue;
+        this.pos = end + 1;
+        if (m) this.endTag(m[1].toLowerCase());
+        continue;
       }
       if (!((c >= 65 && c <= 90) || (c >= 97 && c <= 122))) { this.appendText('<'); this.pos = lt + 1; continue; }
       // start tag
@@ -79,7 +81,7 @@ class Parser {
       this.startTag(tag.name, tag.attrs, tag.selfClosing);
       // raw text / rcdata content
       const name = tag.name;
-      if (this.current && this.current.localName === name && (RAW_TEXT_TAGS.has(name) || RCDATA_TAGS.has(name)) && this.current.namespaceURI !== SVG_NS) {
+      if (this.current && this.current.localName === name && (RAW_TEXT_TAGS.has(name) || RCDATA_TAGS.has(name) || (name === 'noscript' && this.scriptRunner)) && this.current.namespaceURI !== SVG_NS) {
         const closeRe = new RegExp('</' + name + '(?=[\\s/>])', 'ig'); closeRe.lastIndex = this.pos;
         const m2 = closeRe.exec(this.input);
         const end = m2 ? m2.index : this.input.length;
@@ -194,6 +196,7 @@ class Parser {
   }
   endTag(name) {
     if (name === 'br') { this.startTag('br', [], false); return; }
+    if (name === 'noscript' && !this.scriptRunner) { const i = this.findInStack('noscript', null); if (i > 0) { const el = this.stack[i]; this.popTo(i); const p = el.parentNode; if (p) { while (el.firstChild) p.insertBefore(el.firstChild, el); p.removeChild(el); } } return; }
     if (name === 'p') { const i = this.findInStack('p', SCOPE_STOPS); if (i < 0) { this.startTag('p', [], false); this.stack.pop(); return; } this.popTo(i); return; }
     if (!this.fragment && (name === 'html' || name === 'body' || name === 'head')) { if (name === 'head' && this.head && this.current === this.head) this.stack = [this.html]; return; }
     if (name === 'form') { this.formPtr = null; }
@@ -205,9 +208,7 @@ class Parser {
   }
   handleScript(el) {
     if (!this.scriptRunner) return;
-    this.scriptsSeen++;
     if (el._attrs.defer !== undefined || el._attrs.async !== undefined || el._attrs.type === 'module') { this.deferred.push(el); return; }
-    if (el._attrs.src !== undefined) { this.deferred.length && this.deferred.some(d => d._attrs.async === undefined); }
     this.scriptRunner(el, this);
   }
   finish() {

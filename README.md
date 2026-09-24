@@ -195,7 +195,7 @@ policy if that matters.
 
 ```text
 desk/app/browser.hoon        agent: Eyre/MCP endpoint, contexts, jobs, Iris, policy
-desk/lib/browser-js.hoon     Lia scripts driving QuickJS: boot, load, act, query
+desk/lib/browser-js.hoon     Lia scripts driving QuickJS: init, load, act, query
 desk/lib/browser-mcp.hoon    tool catalog, JSON-RPC envelopes, paging
 desk/lib/browser-cookie.hoon cookie jar (Set-Cookie parsing, matching)
 desk/lib/browser-url.hoon    URL splitting/resolution, host policy

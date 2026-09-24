@@ -16,7 +16,7 @@ function specificity(parts) {
     const cp = p.compound;
     if (cp.id !== null) a++;
     b += cp.classes.length + cp.attrs.length;
-    for (const ps of cp.pseudos) { if (ps.name === 'not' || ps.name === 'is' || ps.name === 'has') { let best = [0, 0, 0]; for (const inner of ps.arg || []) { const s = specificity(inner); if (s[0] > best[0] || (s[0] === best[0] && (s[1] > best[1] || (s[1] === best[1] && s[2] > best[2])))) best = s; } a += best[0]; b += best[1]; c += best[2]; } else if (ps.name === 'where') { /* zero */ } else if (ps.name.startsWith('::')) c++; else b++; }
+    for (const ps of cp.pseudos) { if (ps.name === 'not' || ps.name === 'is' || ps.name === 'has') { let best = [0, 0, 0]; for (const inner of ps.arg) { const s = specificity(inner); if (s[0] > best[0] || (s[0] === best[0] && (s[1] > best[1] || (s[1] === best[1] && s[2] > best[2])))) best = s; } a += best[0]; b += best[1]; c += best[2]; } else if (ps.name === 'where') { /* zero */ } else if (ps.name.startsWith('::')) c++; else b++; }
     if (cp.tag && cp.tag !== '*') c++;
   }
   return [a, b, c];
@@ -132,10 +132,11 @@ R.loadStyleElement = el => {
   if (el.localName === 'style') { if (el._attrs.media && !mediaMatches(el._attrs.media)) return; addStylesheet(el.textContent, R.base(), 0); }
   else if (el.localName === 'link' && /\bstylesheet\b/i.test(el._attrs.rel || '') && el._attrs.href !== undefined && !('disabled' in el._attrs)) { if (el._attrs.media && !mediaMatches(el._attrs.media)) return; loadExternalCss(el._attrs.href, R.base(), 0); }
 };
+// cascade order: !important, then specificity, then source order
+function beats(a, b) { if (a.important !== b.important) return a.important; if (a.spec[0] !== b.spec[0]) return a.spec[0] > b.spec[0]; if (a.spec[1] !== b.spec[1]) return a.spec[1] > b.spec[1]; if (a.spec[2] !== b.spec[2]) return a.spec[2] > b.spec[2]; return a.order > b.order; }
 function buildIndex() {
   const idx = new Map();
   for (const r of R.cssRules) { let l = idx.get(r.key); if (!l) { l = []; idx.set(r.key, l); } l.push(r); }
-  for (const l of idx.values()) l.sort((x, y) => x.important !== y.important ? (x.important ? 1 : -1) : x.spec[0] - y.spec[0] || x.spec[1] - y.spec[1] || x.spec[2] - y.spec[2] || x.order - y.order);
   R.cssIndex = idx;
 }
 // author value of a property for an element (inline style wins unless !important)
@@ -146,7 +147,7 @@ function cssValue(el, prop) {
   if (R.cssRules.length) {
     if (!R.cssIndex) buildIndex();
     const keys = ['*']; if (el._attrs.id) keys.push('i:' + el._attrs.id); const cls = el._attrs.class; if (cls) for (const c of cls.split(/\s+/)) if (c) keys.push('c:' + c); keys.push('t:' + el.localName);
-    for (const k of keys) { const rules = R.cssIndex.get(k); if (!rules) continue; for (const r of rules) { if (r.prop !== prop) continue; if (winner && (winner.important && !r.important)) continue; if (winner && !r.important && !winner.important && (winner.spec[0] > r.spec[0] || (winner.spec[0] === r.spec[0] && (winner.spec[1] > r.spec[1] || (winner.spec[1] === r.spec[1] && (winner.spec[2] > r.spec[2] || (winner.spec[2] === r.spec[2] && winner.order > r.order))))))) continue; if (winner && winner.important && r.important && (winner.spec[0] > r.spec[0] || (winner.spec[0] === r.spec[0] && (winner.spec[1] > r.spec[1] || (winner.spec[1] === r.spec[1] && (winner.spec[2] > r.spec[2] || (winner.spec[2] === r.spec[2] && winner.order > r.order))))))) continue; let hit = false; try { hit = matchComplex(el, r.parts, null); } catch (e) { hit = false; } if (hit) winner = r; } }
+    for (const k of keys) { const rules = R.cssIndex.get(k); if (!rules) continue; for (const r of rules) { if (r.prop !== prop) continue; if (winner && !beats(r, winner)) continue; if (matchComplex(el, r.parts, null)) winner = r; } }
   }
   let value = winner ? winner.value : null;
   const inline = el._attrs.style;

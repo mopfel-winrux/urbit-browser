@@ -21,7 +21,6 @@ class HTMLFormElementImpl extends HTMLElementImpl {
 }
 function formOf(el) { const fa = el._attrs.form; if (fa !== undefined) return el.ownerDocument.getElementById(fa); return el.closest('form'); }
 const validity = { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false };
-class FormControlMixin {}
 function mixinControl(Cls) {
   Object.defineProperties(Cls.prototype, {
     form: { get() { return formOf(this); }, configurable: true },
@@ -30,7 +29,7 @@ function mixinControl(Cls) {
     required: { get() { return 'required' in this._attrs; }, set(v) { this.toggleAttribute('required', !!v); }, configurable: true },
     readOnly: { get() { return 'readonly' in this._attrs; }, set(v) { this.toggleAttribute('readonly', !!v); }, configurable: true },
     autofocus: { get() { return 'autofocus' in this._attrs; }, configurable: true },
-    labels: { get() { const id = this._attrs.id; return R.collect(this.ownerDocument, e => e.localName === 'label' && ((id && e._attrs.for === id) || (!e._attrs.for && e.contains(this)))); }, configurable: true },
+    labels: { get() { return R.labelsFor(this); }, configurable: true },
     validity: { get() { return { ...validity }; }, configurable: true },
     validationMessage: { get() { return ''; }, configurable: true },
     willValidate: { get() { return !this.disabled; }, configurable: true },
@@ -95,7 +94,7 @@ mixinControl(HTMLButtonElementImpl);
 class HTMLOptionElementImpl extends HTMLElementImpl {
   constructor(d, t, ns) { super(d, t, ns); this._selected = undefined; }
   get value() { return this._attrs.value !== undefined ? this._attrs.value : this.text; } set value(v) { this.setAttribute('value', v); }
-  get text() { return this.textContent.replace(/\s+/g, ' ').trim(); } set text(v) { this.textContent = v; }
+  get text() { return R.collapse(this.textContent); } set text(v) { this.textContent = v; }
   get label() { return this._attrs.label !== undefined ? this._attrs.label : this.text; } set label(v) { this.setAttribute('label', v); }
   get selected() { return this._selected !== undefined ? this._selected : ('selected' in this._attrs); }
   set selected(v) { this._selected = !!v; const s = this.closest('select'); if (s && this._selected && !s.multiple) for (const o of s.options) if (o !== this) o._selected = false; }

@@ -98,9 +98,10 @@ function decodeEntities(s) {
     return v;
   });
 }
+function collapse(s) { return s.replace(/[\s\u00a0]+/g, ' ').trim(); }
 function escapeText(s) { return s.replace(/[&<> ]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&nbsp;'); }
 function escapeAttr(s) { return s.replace(/[&" ]/g, c => c === '&' ? '&amp;' : c === '"' ? '&quot;' : '&nbsp;'); }
-R.decodeEntities = decodeEntities; R.escapeText = escapeText; R.escapeAttr = escapeAttr;
+R.decodeEntities = decodeEntities; R.escapeText = escapeText; R.escapeAttr = escapeAttr; R.collapse = collapse;
 
 // ------------------------------------------------------------------ URLs
 // A small WHATWG-ish URL implementation: enough for resolution, components
@@ -200,7 +201,6 @@ function parseURL(url) {
     return out;
   }
   rest = rest.replace(/^[\\/]+/, '');
-  if (protocol === 'file:' && !/^[\\/]/.test(m[2].slice(2))) { /* file:///path */ }
   let end = rest.length;
   for (let i = 0; i < rest.length; i++) { const c = rest[i]; if (c === '/' || c === '\\' || c === '?' || c === '#') { end = i; break; } }
   let authority = rest.slice(0, end); rest = rest.slice(end).replace(/\\/g, '/');
@@ -297,29 +297,31 @@ class MouseEventImpl extends UIEventImpl {
 }
 class PointerEventImpl extends MouseEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.pointerId = i.pointerId || 1; this.pointerType = i.pointerType || 'mouse'; this.isPrimary = true; this.width = 1; this.height = 1; this.pressure = 0; } }
 class WheelEventImpl extends MouseEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.deltaX = i.deltaX || 0; this.deltaY = i.deltaY || 0; this.deltaZ = 0; this.deltaMode = 0; } }
-class FocusEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); this.relatedTarget = (i && i.relatedTarget) || null; } }
+// subclasses that only add defaulted fields
+const eventClass = (Base, fields) => class extends Base { constructor(t, i) { super(t, i); i = i || {}; for (const k of Object.keys(fields)) this[k] = i[k] === undefined ? fields[k] : i[k]; } };
+const FocusEventImpl = eventClass(UIEventImpl, { relatedTarget: null });
 const KEY_CODES = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, ' ': 32, Space: 32, Home: 36, End: 35, PageUp: 33, PageDown: 34 };
 class KeyboardEventImpl extends UIEventImpl {
   constructor(t, i) { super(t, i); i = i || {}; this.key = i.key || ''; this.code = i.code || ''; this.location = 0; this.repeat = !!i.repeat; this.isComposing = false; for (const k of ['ctrlKey', 'shiftKey', 'altKey', 'metaKey']) this[k] = !!i[k]; this.keyCode = i.keyCode !== undefined ? i.keyCode : (KEY_CODES[this.key] !== undefined ? KEY_CODES[this.key] : (this.key.length === 1 ? this.key.toUpperCase().charCodeAt(0) : 0)); this.which = this.keyCode; this.charCode = this.key.length === 1 ? this.key.charCodeAt(0) : 0; }
   getModifierState() { return false; }
 }
-class InputEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.data = i.data === undefined ? null : i.data; this.inputType = i.inputType || ''; this.isComposing = false; } }
-class CustomEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.detail = i && i.detail !== undefined ? i.detail : null; } initCustomEvent(t, b, c, d) { this.initEvent(t, b, c); this.detail = d; } }
-class SubmitEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.submitter = (i && i.submitter) || null; } }
-class PopStateEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.state = (i && i.state !== undefined) ? i.state : null; } }
-class HashChangeEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.oldURL = i.oldURL || ''; this.newURL = i.newURL || ''; } }
-class StorageEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.key = i.key || null; this.oldValue = i.oldValue || null; this.newValue = i.newValue || null; this.url = i.url || ''; this.storageArea = i.storageArea || null; } }
-class ErrorEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.message = i.message || ''; this.filename = i.filename || ''; this.lineno = i.lineno || 0; this.colno = i.colno || 0; this.error = i.error; } }
-class PromiseRejectionEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.promise = i.promise; this.reason = i.reason; } }
-class ProgressEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.lengthComputable = !!i.lengthComputable; this.loaded = i.loaded || 0; this.total = i.total || 0; } }
-class MessageEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.data = i.data === undefined ? null : i.data; this.origin = i.origin || ''; this.lastEventId = i.lastEventId || ''; this.source = i.source || null; this.ports = i.ports || []; } }
-class TransitionEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.propertyName = i.propertyName || ''; this.elapsedTime = i.elapsedTime || 0; this.pseudoElement = ''; } }
-class AnimationEventImpl extends EventImpl { constructor(t, i) { super(t, i); i = i || {}; this.animationName = i.animationName || ''; this.elapsedTime = i.elapsedTime || 0; this.pseudoElement = ''; } }
-class DragEventImpl extends MouseEventImpl { constructor(t, i) { super(t, i); this.dataTransfer = (i && i.dataTransfer) || null; } }
-class TouchEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); i = i || {}; this.touches = i.touches || []; this.targetTouches = i.targetTouches || []; this.changedTouches = i.changedTouches || []; } }
-class ClipboardEventImpl extends EventImpl { constructor(t, i) { super(t, i); this.clipboardData = (i && i.clipboardData) || null; } }
-class BeforeUnloadEventImpl extends EventImpl { constructor(t, i) { super(t, i); } }
-class CompositionEventImpl extends UIEventImpl { constructor(t, i) { super(t, i); this.data = (i && i.data) || ''; } }
+const InputEventImpl = eventClass(UIEventImpl, { data: null, inputType: '', isComposing: false });
+class CustomEventImpl extends eventClass(EventImpl, { detail: null }) { initCustomEvent(t, b, c, d) { this.initEvent(t, b, c); this.detail = d; } }
+const SubmitEventImpl = eventClass(EventImpl, { submitter: null });
+const PopStateEventImpl = eventClass(EventImpl, { state: null });
+const HashChangeEventImpl = eventClass(EventImpl, { oldURL: '', newURL: '' });
+const StorageEventImpl = eventClass(EventImpl, { key: null, oldValue: null, newValue: null, url: '', storageArea: null });
+const ErrorEventImpl = eventClass(EventImpl, { message: '', filename: '', lineno: 0, colno: 0, error: undefined });
+const PromiseRejectionEventImpl = eventClass(EventImpl, { promise: undefined, reason: undefined });
+const ProgressEventImpl = eventClass(EventImpl, { lengthComputable: false, loaded: 0, total: 0 });
+const MessageEventImpl = eventClass(EventImpl, { data: null, origin: '', lastEventId: '', source: null, ports: [] });
+const TransitionEventImpl = eventClass(EventImpl, { propertyName: '', elapsedTime: 0, pseudoElement: '' });
+const AnimationEventImpl = eventClass(EventImpl, { animationName: '', elapsedTime: 0, pseudoElement: '' });
+const DragEventImpl = eventClass(MouseEventImpl, { dataTransfer: null });
+const TouchEventImpl = eventClass(UIEventImpl, { touches: [], targetTouches: [], changedTouches: [] });
+const ClipboardEventImpl = eventClass(EventImpl, { clipboardData: null });
+const BeforeUnloadEventImpl = eventClass(EventImpl, {});
+const CompositionEventImpl = eventClass(UIEventImpl, { data: '' });
 
 const listenersKey = Symbol('listeners');
 class EventTargetImpl {
@@ -432,12 +434,16 @@ class NodeImpl extends EventTargetImpl {
   get parentElement() { const p = this.parentNode; return p && p.nodeType === 1 ? p : null; }
   get firstChild() { return this.childNodes.length ? this.childNodes[0] : null; }
   get lastChild() { return this.childNodes.length ? this.childNodes[this.childNodes.length - 1] : null; }
-  get nextSibling() { const p = this.parentNode; if (!p) return null; const i = p.childNodes.indexOf(this); return i >= 0 && i + 1 < p.childNodes.length ? p.childNodes[i + 1] : null; }
-  get previousSibling() { const p = this.parentNode; if (!p) return null; const i = p.childNodes.indexOf(this); return i > 0 ? p.childNodes[i - 1] : null; }
+  // index in the parent, verified against a cached hint so sibling walks stay O(1)
+  get _index() { const p = this.parentNode; if (!p) return -1; const cn = p.childNodes; let i = this._idx; if (!(i >= 0 && i < cn.length && cn[i] === this)) { i = cn.indexOf(this); this._idx = i; } return i; }
+  get nextSibling() { const p = this.parentNode; if (!p) return null; const i = this._index; return i + 1 < p.childNodes.length ? p.childNodes[i + 1] : null; }
+  get previousSibling() { const p = this.parentNode; if (!p) return null; const i = this._index; return i > 0 ? p.childNodes[i - 1] : null; }
+  get nextElementSibling() { let n = this.nextSibling; while (n && n.nodeType !== 1) n = n.nextSibling; return n; }
+  get previousElementSibling() { let n = this.previousSibling; while (n && n.nodeType !== 1) n = n.previousSibling; return n; }
   get isConnected() { let n = this; while (n) { if (n.nodeType === 9) return true; n = n._host || n.parentNode; } return false; }
   get baseURI() { return R.location ? R.location.href : ''; }
   get nodeValue() { return null; } set nodeValue(v) {}
-  get textContent() { let s = ''; for (const c of this.childNodes) { if (c.nodeType === 1 || c.nodeType === 11) s += c.textContent; else if (c.nodeType === 3) s += c.data; } return s; }
+  get textContent() { const parts = []; (function rec(n) { const cn = n.childNodes; for (let i = 0; i < cn.length; i++) { const c = cn[i]; if (c.nodeType === 3) parts.push(c.data); else if (c.nodeType === 1 || c.nodeType === 11) rec(c); } })(this); return parts.join(''); }
   set textContent(v) { this._clearChildren(); if (v != null && v !== '') this.appendChild(this.ownerDocument.createTextNode(String(v))); }
   getRootNode() { let n = this; while (n.parentNode || n._host) n = n.parentNode || n._host; return n; }
   hasChildNodes() { return this.childNodes.length > 0; }
@@ -451,7 +457,7 @@ class NodeImpl extends EventTargetImpl {
     if (c.parentNode) c.parentNode.removeChild(c);
     let i = ref ? this.childNodes.indexOf(ref) : -1;
     if (ref && i < 0) throw new Error('NotFoundError: reference node is not a child');
-    if (i < 0) this.childNodes.push(c); else this.childNodes.splice(i, 0, c);
+    if (i < 0) { c._idx = this.childNodes.length; this.childNodes.push(c); } else { this.childNodes.splice(i, 0, c); c._idx = i; }
     c.parentNode = this;
     if (this.ownerDocument && c.ownerDocument !== this.ownerDocument) adoptTree(c, this.ownerDocument);
     R.onInsert && R.onInsert(c, this);
@@ -488,8 +494,6 @@ class CharacterDataImpl extends NodeImpl {
   substringData(o, c) { return this.data.substr(o, c); }
   appendData(s) { this.data += s; } insertData(o, s) { this.data = this.data.slice(0, o) + s + this.data.slice(o); }
   deleteData(o, c) { this.data = this.data.slice(0, o) + this.data.slice(o + c); } replaceData(o, c, s) { this.data = this.data.slice(0, o) + s + this.data.slice(o + c); }
-  get nextElementSibling() { let n = this.nextSibling; while (n && n.nodeType !== 1) n = n.nextSibling; return n; }
-  get previousElementSibling() { let n = this.previousSibling; while (n && n.nodeType !== 1) n = n.previousSibling; return n; }
 }
 class TextImpl extends CharacterDataImpl {
   constructor(doc, data) { super(doc, data); this.nodeType = 3; this.nodeName = '#text'; }
@@ -503,19 +507,32 @@ class CommentImpl extends CharacterDataImpl {
   _cloneShallow() { return new CommentImpl(this.ownerDocument, this.data); }
   get outerHTML() { return '<!--' + this.data + '-->'; }
 }
+// ParentNode: shared by DocumentFragment, Element and Document
+function classTokens(value) { return value ? value.split(/\s+/).filter(Boolean) : []; }
+function mixinParentNode(Cls) {
+  Object.defineProperties(Cls.prototype, {
+    children: { get() { return this.childNodes.filter(c => c.nodeType === 1); }, configurable: true },
+    childElementCount: { get() { let n = 0; for (const c of this.childNodes) if (c.nodeType === 1) n++; return n; }, configurable: true },
+    firstElementChild: { get() { for (const c of this.childNodes) if (c.nodeType === 1) return c; return null; }, configurable: true },
+    lastElementChild: { get() { const cn = this.childNodes; for (let i = cn.length - 1; i >= 0; i--) if (cn[i].nodeType === 1) return cn[i]; return null; }, configurable: true },
+  });
+  Cls.prototype.querySelector = function (s) { return R.querySelector(this, s); };
+  Cls.prototype.querySelectorAll = function (s) { return R.querySelectorAll(this, s); };
+  Cls.prototype.getElementsByTagName = function (t) { t = String(t); const lower = t.toLowerCase(); return collect(this, e => t === '*' || e.localName === lower); };
+  Cls.prototype.getElementsByTagNameNS = function (ns, t) { return this.getElementsByTagName(t); };
+  Cls.prototype.getElementsByClassName = function (c) { const cs = classTokens(String(c)); return collect(this, e => { const l = classTokens(e._attrs.class); return cs.every(x => l.includes(x)); }); };
+}
+// a live DOMTokenList over any space-separated attribute
+function tokenList(el, attr) { return makeClassList({ _attrs: { get class() { return el._attrs[attr] || ''; } }, setAttribute: (k, v) => el.setAttribute(attr, v) }); }
 class DocumentFragmentImpl extends NodeImpl {
   constructor(doc) { super(doc); this.nodeType = 11; this.nodeName = '#document-fragment'; }
   _cloneShallow() { return new DocumentFragmentImpl(this.ownerDocument); }
-  get children() { return this.childNodes.filter(c => c.nodeType === 1); }
-  get childElementCount() { return this.children.length; }
-  get firstElementChild() { return this.children[0] || null; }
-  get lastElementChild() { const c = this.children; return c[c.length - 1] || null; }
-  querySelector(s) { return R.querySelector(this, s); } querySelectorAll(s) { return R.querySelectorAll(this, s); }
   getElementById(id) { return findFirst(this, e => e._attrs.id === id); }
   get outerHTML() { return this.innerHTML; }
   get innerHTML() { return this.childNodes.map(c => c.outerHTML).join(''); }
   set innerHTML(v) { this._clearChildren(); R.parseFragmentInto(String(v), this, null); }
 }
+mixinParentNode(DocumentFragmentImpl);
 class ShadowRootImpl extends DocumentFragmentImpl {
   constructor(doc, host, mode) { super(doc); this._host = host; this.mode = mode || 'open'; this.nodeName = '#shadow-root'; }
   get host() { return this._host; }
@@ -598,7 +615,6 @@ class ElementImpl extends NodeImpl {
     n = String(n); if (this._html) n = n.toLowerCase(); v = String(v);
     const had = n in this._attrs; const old = this._attrs[n];
     this._attrs[n] = v; if (!had) this._attrOrder.push(n);
-    if (n === 'id' || n === 'name') this.ownerDocument && this.ownerDocument._invalidateIds && this.ownerDocument._invalidateIds();
     R.onAttr && R.onAttr(this, n, old, v);
   }
   setAttributeNS(ns, n, v) { this.setAttribute(n, v); }
@@ -620,15 +636,8 @@ class ElementImpl extends NodeImpl {
   set style(v) { if (v == null || v === '') this.removeAttribute('style'); else this.setAttribute('style', String(v)); }
   get dataset() { return this._dataset || (this._dataset = makeDataset(this)); }
   get slot() { return this._attrs.slot || ''; } set slot(v) { this.setAttribute('slot', v); }
-  get part() { return makeClassList({ _attrs: { class: this._attrs.part || '' }, setAttribute: (k, v) => this.setAttribute('part', v) }); }
+  get part() { return tokenList(this, 'part'); }
   get prefix() { return null; }
-  // tree accessors
-  get children() { return this.childNodes.filter(c => c.nodeType === 1); }
-  get childElementCount() { return this.children.length; }
-  get firstElementChild() { return this.children[0] || null; }
-  get lastElementChild() { const c = this.children; return c[c.length - 1] || null; }
-  get nextElementSibling() { let n = this.nextSibling; while (n && n.nodeType !== 1) n = n.nextSibling; return n; }
-  get previousElementSibling() { let n = this.previousSibling; while (n && n.nodeType !== 1) n = n.previousSibling; return n; }
   get assignedSlot() { return null; }
   // html
   get innerHTML() { if (this.localName === 'template' && this._content) return this._content.innerHTML; return this.childNodes.map(c => c.outerHTML).join(''); }
@@ -648,15 +657,9 @@ class ElementImpl extends NodeImpl {
   get innerText() { return R.innerText(this); }
   set innerText(v) { this._clearChildren(); const parts = String(v).split(/\r?\n/); parts.forEach((p, i) => { if (i) this.appendChild(this.ownerDocument.createElement('br')); if (p) this.appendChild(this.ownerDocument.createTextNode(p)); }); }
   get outerText() { return this.innerText; }
-  // queries
-  querySelector(s) { return R.querySelector(this, s); }
-  querySelectorAll(s) { return R.querySelectorAll(this, s); }
   matches(s) { return R.matches(this, s); }
   webkitMatchesSelector(s) { return this.matches(s); }
   closest(s) { let n = this; while (n && n.nodeType === 1) { if (R.matches(n, s)) return n; n = n.parentNode; } return null; }
-  getElementsByTagName(t) { t = String(t); const lower = t.toLowerCase(); return collect(this, e => t === '*' || e.localName === lower); }
-  getElementsByTagNameNS(ns, t) { return this.getElementsByTagName(t); }
-  getElementsByClassName(c) { const cs = String(c).split(/\s+/).filter(Boolean); return collect(this, e => { const l = (e._attrs.class || '').split(/\s+/); return cs.every(x => l.includes(x)); }); }
   // shadow dom
   attachShadow(init) { if (this.shadowRoot) throw new Error('NotSupportedError: shadow root already attached'); this.shadowRoot = new ShadowRootImpl(this.ownerDocument, this, init && init.mode); return this.shadowRoot; }
   // geometry & focus & misc (headless: everything is at the origin)
@@ -697,7 +700,8 @@ class ElementImpl extends NodeImpl {
 }
 function collect(root, pred) { const out = []; walk(root, n => { if (n.nodeType === 1 && pred(n)) out.push(n); }); return out; }
 function findFirst(root, pred) { let found = null; walk(root, n => { if (!found && n.nodeType === 1 && pred(n)) { found = n; return false; } }); return found; }
-function walk(root, fn) { for (const c of root.childNodes) { if (fn(c) === false) return false; if (c.childNodes.length && walk(c, fn) === false) return false; } return true; }
+function walk(root, fn) { const cn = root.childNodes; for (let i = 0; i < cn.length; i++) { const c = cn[i]; if (fn(c) === false) return false; if (c.childNodes.length && walk(c, fn) === false) return false; } return true; }
+mixinParentNode(ElementImpl);
 function serializeElement(el) {
   let s = '<' + el.localName;
   for (const k of el._attrOrder) s += ' ' + k + '="' + escapeAttr(el._attrs[k]) + '"';
@@ -708,7 +712,8 @@ function serializeElement(el) {
   else s += el.childNodes.map(c => c.outerHTML).join('');
   return s + '</' + el.localName + '>';
 }
-R.walk = walk; R.collect = collect;
+R.tableRows = t => { const out = []; for (const c of t.childNodes) { if (c.nodeType !== 1) continue; if (c.localName === 'tr') out.push(c); else if (c.localName === 'thead' || c.localName === 'tbody' || c.localName === 'tfoot') for (const r of c.childNodes) if (r.nodeType === 1 && r.localName === 'tr') out.push(r); } return out; };
+R.walk = walk; R.collect = collect; R.classTokens = classTokens; R.mixinParentNode = mixinParentNode; R.tokenList = tokenList;
 
 // -------------------------------------------------- HTML element classes
 class HTMLElementImpl extends ElementImpl {}
@@ -719,7 +724,7 @@ class HTMLAnchorElementImpl extends HTMLElementImpl {
   get rel() { return this._attrs.rel || ''; } set rel(v) { this.setAttribute('rel', v); }
   get download() { return this._attrs.download || ''; }
   get text() { return this.textContent; } set text(v) { this.textContent = v; }
-  get relList() { return makeClassList({ _attrs: { class: this._attrs.rel || '' }, setAttribute: (k, v) => this.setAttribute('rel', v) }); }
+  get relList() { return tokenList(this, 'rel'); }
   toString() { return this.href; }
 }
 for (const p of ['protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash', 'origin']) Object.defineProperty(HTMLAnchorElementImpl.prototype, p, { get() { try { return new R.URL(this.href)[p]; } catch (e) { return ''; } }, configurable: true });
@@ -749,7 +754,7 @@ class HTMLStyleElementImpl extends HTMLElementImpl { get sheet() { return { cssR
 class HTMLLinkElementImpl extends HTMLElementImpl {
   get href() { const h = this._attrs.href; return h === undefined ? '' : (R.resolveURL(h, R.base()) || h); } set href(v) { this.setAttribute('href', v); }
   get rel() { return this._attrs.rel || ''; } set rel(v) { this.setAttribute('rel', v); }
-  get relList() { return makeClassList({ _attrs: { class: this._attrs.rel || '' }, setAttribute: (k, v) => this.setAttribute('rel', v) }); }
+  get relList() { return tokenList(this, 'rel'); }
   get sheet() { return null; } get media() { return this._attrs.media || ''; } set media(v) { this.setAttribute('media', v); }
   get as() { return this._attrs.as || ''; } set as(v) { this.setAttribute('as', v); }
   get disabled() { return 'disabled' in this._attrs; } set disabled(v) { this.toggleAttribute('disabled', !!v); }
@@ -787,10 +792,10 @@ class HTMLMediaElementImpl extends HTMLElementImpl {
 class HTMLIFrameElementImpl extends HTMLElementImpl {
   get src() { return this._attrs.src || ''; } set src(v) { this.setAttribute('src', v); }
   get contentWindow() { return null; } get contentDocument() { return null; }
-  get name() { return this._attrs.name || ''; } get sandbox() { return makeClassList({ _attrs: { class: this._attrs.sandbox || '' }, setAttribute: () => {} }); }
+  get name() { return this._attrs.name || ''; } get sandbox() { return tokenList(this, 'sandbox'); }
 }
 class HTMLTableElementImpl extends HTMLElementImpl {
-  get rows() { return collect(this, e => e.localName === 'tr' && (e.parentNode === this || e.parentNode.parentNode === this)); }
+  get rows() { return R.tableRows(this); }
   get tBodies() { return this.children.filter(e => e.localName === 'tbody'); }
   get tHead() { return this.children.find(e => e.localName === 'thead') || null; } get tFoot() { return this.children.find(e => e.localName === 'tfoot') || null; }
   get caption() { return this.children.find(e => e.localName === 'caption') || null; }
@@ -897,6 +902,7 @@ const CLOSE_ON_OPEN = {
 const SVG_NS = 'http://www.w3.org/2000/svg', MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const SVG_CASE = { altglyph: 'altGlyph', altglyphdef: 'altGlyphDef', altglyphitem: 'altGlyphItem', animatecolor: 'animateColor', animatemotion: 'animateMotion', animatetransform: 'animateTransform', clippath: 'clipPath', feblend: 'feBlend', fecolormatrix: 'feColorMatrix', fecomponenttransfer: 'feComponentTransfer', fecomposite: 'feComposite', feconvolvematrix: 'feConvolveMatrix', fediffuselighting: 'feDiffuseLighting', fedisplacementmap: 'feDisplacementMap', fedistantlight: 'feDistantLight', feflood: 'feFlood', fefunca: 'feFuncA', fefuncb: 'feFuncB', fefuncg: 'feFuncG', fefuncr: 'feFuncR', fegaussianblur: 'feGaussianBlur', feimage: 'feImage', femerge: 'feMerge', femergenode: 'feMergeNode', femorphology: 'feMorphology', feoffset: 'feOffset', fepointlight: 'fePointLight', fespecularlighting: 'feSpecularLighting', fespotlight: 'feSpotLight', fetile: 'feTile', feturbulence: 'feTurbulence', foreignobject: 'foreignObject', glyphref: 'glyphRef', lineargradient: 'linearGradient', radialgradient: 'radialGradient', textpath: 'textPath' };
 
+const END_TAG_RE = /([a-zA-Z][^\s/>]*)/y;
 class Parser {
   constructor(doc, opts) {
     this.doc = doc; this.opts = opts || {};
@@ -906,7 +912,7 @@ class Parser {
     this.html = null; this.head = null; this.body = null;
     this.input = ''; this.pos = 0;
     this.scriptRunner = this.opts.scriptRunner || null;   // (scriptEl) => void, may call document.write
-    this.deferred = []; this.scriptsSeen = 0;
+    this.deferred = [];
     this.formPtr = null;
     if (this.fragment && this.opts.context) {
       const ctx = this.opts.context.localName;
@@ -920,7 +926,6 @@ class Parser {
   parse(input) {
     this.input = input; this.pos = 0;
     if (this.rawContext) { this.appendText(this.rawContext === 'script' || this.rawContext === 'style' ? input : decodeEntities(input)); return; }
-    const inp = () => this.input;
     while (this.pos < this.input.length) {
       const s = this.input;
       const lt = s.indexOf('<', this.pos);
@@ -934,10 +939,12 @@ class Parser {
       }
       if (c === 63) { let end = s.indexOf('>', lt); if (end < 0) end = s.length; this.pos = end + 1; continue; } // <?
       if (c === 47) { // </
-        const m = /^<\/([a-zA-Z][^\s/>]*)\s*[^>]*>/.exec(s.slice(lt, lt + 200)) || /^<\/([a-zA-Z][^\s/>]*)/.exec(s.slice(lt, lt + 200));
-        if (!m) { let end = s.indexOf('>', lt); if (end < 0) end = s.length; this.pos = end + 1; continue; }
+        END_TAG_RE.lastIndex = lt + 2;
+        const m = END_TAG_RE.exec(s);
         let end = s.indexOf('>', lt); if (end < 0) end = s.length;
-        this.pos = end + 1; this.endTag(m[1].toLowerCase()); continue;
+        this.pos = end + 1;
+        if (m) this.endTag(m[1].toLowerCase());
+        continue;
       }
       if (!((c >= 65 && c <= 90) || (c >= 97 && c <= 122))) { this.appendText('<'); this.pos = lt + 1; continue; }
       // start tag
@@ -946,7 +953,7 @@ class Parser {
       this.startTag(tag.name, tag.attrs, tag.selfClosing);
       // raw text / rcdata content
       const name = tag.name;
-      if (this.current && this.current.localName === name && (RAW_TEXT_TAGS.has(name) || RCDATA_TAGS.has(name)) && this.current.namespaceURI !== SVG_NS) {
+      if (this.current && this.current.localName === name && (RAW_TEXT_TAGS.has(name) || RCDATA_TAGS.has(name) || (name === 'noscript' && this.scriptRunner)) && this.current.namespaceURI !== SVG_NS) {
         const closeRe = new RegExp('</' + name + '(?=[\\s/>])', 'ig'); closeRe.lastIndex = this.pos;
         const m2 = closeRe.exec(this.input);
         const end = m2 ? m2.index : this.input.length;
@@ -1061,6 +1068,7 @@ class Parser {
   }
   endTag(name) {
     if (name === 'br') { this.startTag('br', [], false); return; }
+    if (name === 'noscript' && !this.scriptRunner) { const i = this.findInStack('noscript', null); if (i > 0) { const el = this.stack[i]; this.popTo(i); const p = el.parentNode; if (p) { while (el.firstChild) p.insertBefore(el.firstChild, el); p.removeChild(el); } } return; }
     if (name === 'p') { const i = this.findInStack('p', SCOPE_STOPS); if (i < 0) { this.startTag('p', [], false); this.stack.pop(); return; } this.popTo(i); return; }
     if (!this.fragment && (name === 'html' || name === 'body' || name === 'head')) { if (name === 'head' && this.head && this.current === this.head) this.stack = [this.html]; return; }
     if (name === 'form') { this.formPtr = null; }
@@ -1072,9 +1080,7 @@ class Parser {
   }
   handleScript(el) {
     if (!this.scriptRunner) return;
-    this.scriptsSeen++;
     if (el._attrs.defer !== undefined || el._attrs.async !== undefined || el._attrs.type === 'module') { this.deferred.push(el); return; }
-    if (el._attrs.src !== undefined) { this.deferred.length && this.deferred.some(d => d._attrs.async === undefined); }
     this.scriptRunner(el, this);
   }
   finish() {
@@ -1163,7 +1169,7 @@ class SelParser {
           this.pos++;
           const lname = name.toLowerCase();
           if (lname === 'not' || lname === 'is' || lname === 'where' || lname === 'has' || lname === 'matches' || lname === '-webkit-any') {
-            this.ws(); const start = this.pos;
+            this.ws();
             // :has() may start with a combinator
             let rel = null; if (lname === 'has' && /[>+~]/.test(this.s[this.pos])) { rel = this.s[this.pos]; this.pos++; }
             arg = this.parseList(); this.ws();
@@ -1176,7 +1182,9 @@ class SelParser {
             arg = this.s.slice(start, this.pos - 1).trim();
           }
         }
-        c.pseudos.push({ name: name.toLowerCase(), arg }); any = true; continue;
+        const lname2 = name.toLowerCase();
+        if (arg === null && /^(not|is|where|has|matches|-webkit-any|nth-child|nth-last-child|nth-of-type|nth-last-of-type|lang)$/.test(lname2)) throw syntaxError(this.s);
+        c.pseudos.push({ name: lname2, arg }); any = true; continue;
       }
       const t = this.ident();
       if (t != null) { if (c.tag) throw syntaxError(this.s); c.tag = t.toLowerCase(); any = true; continue; }
@@ -1196,7 +1204,7 @@ function nthMatch(ab, idx) { const [a, b] = ab; if (a === 0) return idx === b; c
 function matchCompound(el, c, scope) {
   if (c.tag && c.tag !== '*') { if (el._html ? el.localName !== c.tag : el.localName.toLowerCase() !== c.tag) return false; }
   if (c.id !== null && el._attrs.id !== c.id) return false;
-  if (c.classes.length) { const cl = el._attrs.class; if (!cl) return false; const list = cl.split(/\s+/); for (const x of c.classes) if (!list.includes(x)) return false; }
+  if (c.classes.length) { const cl = el._attrs.class; if (!cl) return false; if (el._classCacheSrc !== cl) { el._classCacheSrc = cl; el._classCache = classTokens(cl); } const list = el._classCache; for (const x of c.classes) if (!list.includes(x)) return false; }
   for (const a of c.attrs) {
     const v = el._attrs[a.name]; if (v === undefined) return false;
     if (!a.op) continue;
@@ -1320,7 +1328,6 @@ class HTMLFormElementImpl extends HTMLElementImpl {
 }
 function formOf(el) { const fa = el._attrs.form; if (fa !== undefined) return el.ownerDocument.getElementById(fa); return el.closest('form'); }
 const validity = { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, tooLong: false, tooShort: false, rangeUnderflow: false, rangeOverflow: false, stepMismatch: false, badInput: false, customError: false };
-class FormControlMixin {}
 function mixinControl(Cls) {
   Object.defineProperties(Cls.prototype, {
     form: { get() { return formOf(this); }, configurable: true },
@@ -1329,7 +1336,7 @@ function mixinControl(Cls) {
     required: { get() { return 'required' in this._attrs; }, set(v) { this.toggleAttribute('required', !!v); }, configurable: true },
     readOnly: { get() { return 'readonly' in this._attrs; }, set(v) { this.toggleAttribute('readonly', !!v); }, configurable: true },
     autofocus: { get() { return 'autofocus' in this._attrs; }, configurable: true },
-    labels: { get() { const id = this._attrs.id; return R.collect(this.ownerDocument, e => e.localName === 'label' && ((id && e._attrs.for === id) || (!e._attrs.for && e.contains(this)))); }, configurable: true },
+    labels: { get() { return R.labelsFor(this); }, configurable: true },
     validity: { get() { return { ...validity }; }, configurable: true },
     validationMessage: { get() { return ''; }, configurable: true },
     willValidate: { get() { return !this.disabled; }, configurable: true },
@@ -1394,7 +1401,7 @@ mixinControl(HTMLButtonElementImpl);
 class HTMLOptionElementImpl extends HTMLElementImpl {
   constructor(d, t, ns) { super(d, t, ns); this._selected = undefined; }
   get value() { return this._attrs.value !== undefined ? this._attrs.value : this.text; } set value(v) { this.setAttribute('value', v); }
-  get text() { return this.textContent.replace(/\s+/g, ' ').trim(); } set text(v) { this.textContent = v; }
+  get text() { return R.collapse(this.textContent); } set text(v) { this.textContent = v; }
   get label() { return this._attrs.label !== undefined ? this._attrs.label : this.text; } set label(v) { this.setAttribute('label', v); }
   get selected() { return this._selected !== undefined ? this._selected : ('selected' in this._attrs); }
   set selected(v) { this._selected = !!v; const s = this.closest('select'); if (s && this._selected && !s.multiple) for (const o of s.options) if (o !== this) o._selected = false; }
@@ -1495,7 +1502,7 @@ class DocumentImpl extends NodeImpl {
   get head() { const h = this.documentElement; return h ? (h.children.find(c => c.localName === 'head') || null) : null; }
   get body() { const h = this.documentElement; return h ? (h.children.find(c => c.localName === 'body' || c.localName === 'frameset') || null) : null; }
   set body(v) { const old = this.body; if (old) old.replaceWith(v); else this.documentElement.appendChild(v); }
-  get title() { const t = R.querySelector(this, 'title'); return t ? t.textContent.replace(/\s+/g, ' ').trim() : ''; }
+  get title() { const t = R.querySelector(this, 'title'); return t ? R.collapse(t.textContent) : ''; }
   set title(v) { let t = R.querySelector(this, 'title'); if (!t) { t = this.createElement('title'); (this.head || this.documentElement || this).appendChild(t); } t.textContent = String(v); }
   get URL() { return this._isMain ? R.location.href : (this._url || 'about:blank'); }
   get documentURI() { return this.URL; }
@@ -1528,9 +1535,6 @@ class DocumentImpl extends NodeImpl {
   get anchors() { return R.collect(this, e => e.localName === 'a' && 'name' in e._attrs); }
   get scripts() { return R.collect(this, e => e.localName === 'script'); }
   get embeds() { return R.collect(this, e => e.localName === 'embed'); } get plugins() { return this.embeds; }
-  get children() { return this.childNodes.filter(c => c.nodeType === 1); }
-  get childElementCount() { return this.children.length; }
-  get firstElementChild() { return this.children[0] || null; } get lastElementChild() { const c = this.children; return c[c.length - 1] || null; }
   _createElementRaw(tag, ns) {
     if (ns === SVG_NS) return new SVGElementImpl(this, tag, ns);
     if (ns && ns !== 'http://www.w3.org/1999/xhtml') return new ElementImpl(this, tag, ns);
@@ -1555,12 +1559,19 @@ class DocumentImpl extends NodeImpl {
   createExpression() { throw new Error('XPath is not supported'); } evaluate() { throw new Error('XPath is not supported'); }
   importNode(n, deep) { const c = n.cloneNode(!!deep); adoptTree(c, this); return c; }
   adoptNode(n) { if (n.parentNode) n.parentNode.removeChild(n); adoptTree(n, this); return n; }
-  getElementById(id) { id = String(id); return findFirst(this, e => e._attrs.id === id); }
+  _index() {
+    if (this._idxGen === R.cssGeneration && this._ids) return;
+    const ids = new Map(), labels = new Map();
+    R.walk(this, n => {
+      if (n.nodeType !== 1) return;
+      const id = n._attrs.id; if (id !== undefined && !ids.has(id)) ids.set(id, n);
+      if (n.localName === 'label') { const f = n._attrs.for; if (f !== undefined) { const l = labels.get('#' + f) || []; l.push(n); labels.set('#' + f, l); } else { const c = findFirst(n, R.isLabelable); if (c) { const l = labels.get(c) || []; l.push(n); labels.set(c, l); } } }
+    });
+    this._ids = ids; this._labels = labels; this._idxGen = R.cssGeneration;
+  }
+  getElementById(id) { this._index(); return this._ids.get(String(id)) || null; }
+  _labelsFor(el) { this._index(); const byFor = el._attrs.id !== undefined ? (this._labels.get('#' + el._attrs.id) || []) : []; const wrapping = this._labels.get(el) || []; return byFor.concat(wrapping); }
   getElementsByName(n) { n = String(n); return R.collect(this, e => e._attrs.name === n); }
-  getElementsByTagName(t) { t = String(t); const l = t.toLowerCase(); return R.collect(this, e => t === '*' || e.localName === l); }
-  getElementsByTagNameNS(ns, t) { return this.getElementsByTagName(t); }
-  getElementsByClassName(c) { const cs = String(c).split(/\s+/).filter(Boolean); return R.collect(this, e => { const l = (e._attrs.class || '').split(/\s+/); return cs.every(x => l.includes(x)); }); }
-  querySelector(s) { return R.querySelector(this, s); } querySelectorAll(s) { return R.querySelectorAll(this, s); }
   elementFromPoint() { return null; } elementsFromPoint() { return []; } caretRangeFromPoint() { return null; } caretPositionFromPoint() { return null; }
   getSelection() { return R.window.getSelection(); }
   execCommand() { return false; } queryCommandSupported() { return false; } queryCommandEnabled() { return false; } queryCommandState() { return false; } queryCommandValue() { return ''; }
@@ -1597,9 +1608,10 @@ class RangeImpl {
 class TreeWalkerImpl {
   constructor(root, whatToShow, filter) { this.root = root; this.currentNode = root; this.whatToShow = whatToShow === undefined ? 0xffffffff : whatToShow; this.filter = filter || null; this._referenceNode = root; this._pointerBeforeReferenceNode = true; }
   _accept(n) { const mask = n.nodeType === 1 ? 1 : n.nodeType === 3 ? 4 : n.nodeType === 8 ? 128 : n.nodeType === 9 ? 256 : n.nodeType === 11 ? 1024 : 0; if (!(this.whatToShow & mask)) return 3; if (!this.filter) return 1; const f = typeof this.filter === 'function' ? this.filter : this.filter.acceptNode; const r = f ? f.call(this.filter, n) : 1; return r === undefined ? 1 : r; }
-  _all() { const out = []; R.walk(this.root, n => { out.push(n); }); return out; }
-  nextNode() { const all = this._all(); let i = all.indexOf(this.currentNode); for (i = i + 1; i < all.length; i++) if (this._accept(all[i]) === 1) { this.currentNode = all[i]; return all[i]; } return null; }
-  previousNode() { const all = this._all(); let i = all.indexOf(this.currentNode); if (i < 0) i = all.length; for (i = i - 1; i >= 0; i--) if (this._accept(all[i]) === 1) { this.currentNode = all[i]; return all[i]; } return null; }
+  _following(n) { if (n.childNodes.length) return n.childNodes[0]; while (n && n !== this.root) { if (n.nextSibling) return n.nextSibling; n = n.parentNode; } return null; }
+  _preceding(n) { if (n === this.root) return null; let p = n.previousSibling; if (!p) return n.parentNode === this.root ? null : n.parentNode; while (p.childNodes.length) p = p.childNodes[p.childNodes.length - 1]; return p; }
+  nextNode() { let n = this._following(this.currentNode); while (n) { if (this._accept(n) === 1) { this.currentNode = n; return n; } n = this._following(n); } return null; }
+  previousNode() { let n = this._preceding(this.currentNode); while (n) { if (this._accept(n) === 1) { this.currentNode = n; return n; } n = this._preceding(n); } return null; }
   parentNode() { let n = this.currentNode.parentNode; while (n && n !== this.root.parentNode) { if (this._accept(n) === 1) { this.currentNode = n; return n; } n = n.parentNode; } return null; }
   firstChild() { for (const c of this.currentNode.childNodes) if (this._accept(c) === 1) { this.currentNode = c; return c; } return null; }
   lastChild() { const cs = this.currentNode.childNodes; for (let i = cs.length - 1; i >= 0; i--) if (this._accept(cs[i]) === 1) { this.currentNode = cs[i]; return cs[i]; } return null; }
@@ -1608,6 +1620,8 @@ class TreeWalkerImpl {
   get referenceNode() { return this.currentNode; }
   detach() {}
 }
+R.mixinParentNode(DocumentImpl);
+R.labelsFor = el => { const d = el.ownerDocument; return d && d._isMain ? d._labelsFor(el) : R.collect(d || el.getRootNode(), e => e.localName === 'label' && ((el._attrs.id && e._attrs.for === el._attrs.id) || (!e._attrs.for && e.contains(el)))); };
 R.classes.Document = DocumentImpl; R.classes.HTMLDocument = DocumentImpl; R.classes.XMLDocument = DocumentImpl; R.classes.Range = RangeImpl; R.classes.TreeWalker = TreeWalkerImpl; R.classes.NodeIterator = TreeWalkerImpl;
 
 // ------------------------------------------------------------ Visibility
@@ -1616,8 +1630,7 @@ R.base = () => R.baseHref || R.location.href;
 R.isVisible = el => {
   let n = el;
   while (n && n.nodeType === 1) {
-    if (n.localName === 'template' || n.localName === 'head') return false;
-    if (n.localName === 'noscript' && R.opts.js) return false;
+    if (n.localName === 'template' || n.localName === 'head' || n.localName === 'noscript') return false;
     if (n.localName === 'input' && n.type === 'hidden') return false;
     if (R.cssHidden(n)) return false;
     if (n.localName === 'dialog' && !('open' in n._attrs)) return false;
@@ -1751,7 +1764,10 @@ function bodyToString(body, headers) {
 function hostFetch(url, method, headers, body, kind) {
   if (!host.fetch) throw new TypeError('Failed to fetch: no network access');
   const raw = host.fetch(url, method, JSON.stringify(headers instanceof HeadersImpl ? headers._toObject() : (headers || {})), body == null ? '' : String(body), kind || 'fetch');
-  let r; try { r = JSON.parse(raw); } catch (e) { throw new TypeError('Failed to fetch: bad host response'); }
+  let r;
+  const nl = raw.indexOf('\n');
+  try { r = JSON.parse(nl < 0 ? raw : raw.slice(0, nl)); } catch (e) { throw new TypeError('Failed to fetch: bad host response'); }
+  if (nl >= 0) r.body = raw.slice(nl + 1);
   if (r.error) throw new TypeError('Failed to fetch: ' + r.error);
   R.subrequests = (R.subrequests || 0) + 1;
   return r;
@@ -1964,7 +1980,7 @@ function specificity(parts) {
     const cp = p.compound;
     if (cp.id !== null) a++;
     b += cp.classes.length + cp.attrs.length;
-    for (const ps of cp.pseudos) { if (ps.name === 'not' || ps.name === 'is' || ps.name === 'has') { let best = [0, 0, 0]; for (const inner of ps.arg || []) { const s = specificity(inner); if (s[0] > best[0] || (s[0] === best[0] && (s[1] > best[1] || (s[1] === best[1] && s[2] > best[2])))) best = s; } a += best[0]; b += best[1]; c += best[2]; } else if (ps.name === 'where') { /* zero */ } else if (ps.name.startsWith('::')) c++; else b++; }
+    for (const ps of cp.pseudos) { if (ps.name === 'not' || ps.name === 'is' || ps.name === 'has') { let best = [0, 0, 0]; for (const inner of ps.arg) { const s = specificity(inner); if (s[0] > best[0] || (s[0] === best[0] && (s[1] > best[1] || (s[1] === best[1] && s[2] > best[2])))) best = s; } a += best[0]; b += best[1]; c += best[2]; } else if (ps.name === 'where') { /* zero */ } else if (ps.name.startsWith('::')) c++; else b++; }
     if (cp.tag && cp.tag !== '*') c++;
   }
   return [a, b, c];
@@ -2080,10 +2096,11 @@ R.loadStyleElement = el => {
   if (el.localName === 'style') { if (el._attrs.media && !mediaMatches(el._attrs.media)) return; addStylesheet(el.textContent, R.base(), 0); }
   else if (el.localName === 'link' && /\bstylesheet\b/i.test(el._attrs.rel || '') && el._attrs.href !== undefined && !('disabled' in el._attrs)) { if (el._attrs.media && !mediaMatches(el._attrs.media)) return; loadExternalCss(el._attrs.href, R.base(), 0); }
 };
+// cascade order: !important, then specificity, then source order
+function beats(a, b) { if (a.important !== b.important) return a.important; if (a.spec[0] !== b.spec[0]) return a.spec[0] > b.spec[0]; if (a.spec[1] !== b.spec[1]) return a.spec[1] > b.spec[1]; if (a.spec[2] !== b.spec[2]) return a.spec[2] > b.spec[2]; return a.order > b.order; }
 function buildIndex() {
   const idx = new Map();
   for (const r of R.cssRules) { let l = idx.get(r.key); if (!l) { l = []; idx.set(r.key, l); } l.push(r); }
-  for (const l of idx.values()) l.sort((x, y) => x.important !== y.important ? (x.important ? 1 : -1) : x.spec[0] - y.spec[0] || x.spec[1] - y.spec[1] || x.spec[2] - y.spec[2] || x.order - y.order);
   R.cssIndex = idx;
 }
 // author value of a property for an element (inline style wins unless !important)
@@ -2094,7 +2111,7 @@ function cssValue(el, prop) {
   if (R.cssRules.length) {
     if (!R.cssIndex) buildIndex();
     const keys = ['*']; if (el._attrs.id) keys.push('i:' + el._attrs.id); const cls = el._attrs.class; if (cls) for (const c of cls.split(/\s+/)) if (c) keys.push('c:' + c); keys.push('t:' + el.localName);
-    for (const k of keys) { const rules = R.cssIndex.get(k); if (!rules) continue; for (const r of rules) { if (r.prop !== prop) continue; if (winner && (winner.important && !r.important)) continue; if (winner && !r.important && !winner.important && (winner.spec[0] > r.spec[0] || (winner.spec[0] === r.spec[0] && (winner.spec[1] > r.spec[1] || (winner.spec[1] === r.spec[1] && (winner.spec[2] > r.spec[2] || (winner.spec[2] === r.spec[2] && winner.order > r.order))))))) continue; if (winner && winner.important && r.important && (winner.spec[0] > r.spec[0] || (winner.spec[0] === r.spec[0] && (winner.spec[1] > r.spec[1] || (winner.spec[1] === r.spec[1] && (winner.spec[2] > r.spec[2] || (winner.spec[2] === r.spec[2] && winner.order > r.order))))))) continue; let hit = false; try { hit = matchComplex(el, r.parts, null); } catch (e) { hit = false; } if (hit) winner = r; } }
+    for (const k of keys) { const rules = R.cssIndex.get(k); if (!rules) continue; for (const r of rules) { if (r.prop !== prop) continue; if (winner && !beats(r, winner)) continue; if (matchComplex(el, r.parts, null)) winner = r; } }
   }
   let value = winner ? winner.value : null;
   const inline = el._attrs.style;
@@ -2244,7 +2261,6 @@ const SKIP_TAGS = new Set(['script', 'style', 'template', 'noscript', 'head', 'm
 const LANDMARKS = { nav: 'nav', main: 'main', header: 'header', footer: 'footer', aside: 'aside', form: 'form', dialog: 'dialog', details: 'details', fieldset: 'fieldset', article: 'article', section: 'section', search: 'search' };
 const ROLE_MAP = { button: 'button', link: 'link', checkbox: 'checkbox', radio: 'radio', textbox: 'textbox', searchbox: 'textbox', combobox: 'combobox', listbox: 'combobox', menuitem: 'button', menuitemcheckbox: 'checkbox', menuitemradio: 'radio', tab: 'button', switch: 'checkbox', option: 'option', slider: 'slider', spinbutton: 'textbox', heading: 'heading', img: 'img', navigation: 'nav', main: 'main', banner: 'header', contentinfo: 'footer', complementary: 'aside', form: 'form', dialog: 'dialog', alertdialog: 'dialog', search: 'search', region: 'section', list: 'list', listitem: 'listitem', table: 'table', grid: 'table', row: 'row', cell: 'cell', gridcell: 'cell', columnheader: 'cell', rowheader: 'cell', presentation: 'none', none: 'none', tree: 'list', treeitem: 'listitem', menu: 'list', menubar: 'list', tablist: 'list', separator: 'separator', alert: 'alert', status: 'status', progressbar: 'progress' };
 const ALIGN = { maxText: 400, maxLines: 6000, maxOptions: 25, maxHref: 160, maxDepth: 14 };
-function collapse(s) { return s.replace(/[\s ]+/g, ' ').trim(); }
 function clip(s, n) { s = String(s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 function q(s) { return JSON.stringify(clip(collapse(s), ALIGN.maxText)); }
 function accessibleName(el) {
@@ -2297,22 +2313,20 @@ class Snapshot {
   push(depth, text) { if (this.lines.length >= ALIGN.maxLines) { this.truncated = true; return; } this.lines.push('  '.repeat(Math.min(depth, ALIGN.maxDepth)) + text); }
   render(root) { const ctx = { depth: 0, buf: '' }; this.renderChildren(root, ctx); this.flush(ctx); if (this.truncated) this.lines.push('… snapshot truncated'); return this; }
   flush(ctx) { const t = collapse(ctx.buf); ctx.buf = ''; if (t) this.push(ctx.depth, (ctx.prefix ? ctx.prefix : 'text ') + q(t)); ctx.prefix = ''; }
-  renderChildren(node, ctx) { for (const c of node.childNodes.slice()) this.renderNode(c, ctx); if (node.shadowRoot) this.renderChildren(node.shadowRoot, ctx); }
+  renderChildren(node, ctx) { const cn = node.childNodes; for (let i = 0; i < cn.length; i++) this.renderNode(cn[i], ctx); if (node.shadowRoot) this.renderChildren(node.shadowRoot, ctx); }
   renderNode(n, ctx) {
     if (n.nodeType === 3) { ctx.buf += n.data; return; }
     if (n.nodeType !== 1) return;
     const ln = n.localName;
-    if (ln === 'noscript' && !R.opts.js) { this.renderChildren(n, ctx); return; }
     if (SKIP_TAGS.has(ln) || !R.isVisible(n) || n._attrs['aria-hidden'] === 'true') return;
     if (ln === 'br') { ctx.buf += ' '; return; }
     if (ln === 'slot') { this.renderChildren(n, ctx); return; }
-    if (ln === 'noscript') { if (!R.opts.js) this.renderChildren(n, ctx); return; }
     const role = roleOf(n);
     if (role === 'skip') return;
     if (role === 'inline' || role === 'none') { if (role === 'none' && BLOCK_TAGS.has(ln)) { this.flush(ctx); this.renderChildren(n, ctx); this.flush(ctx); } else this.renderChildren(n, ctx); return; }
-    if (role === 'img') { const name = accessibleName(n); if (name) this.line(ctx, 'img ' + q(name)); else if (ctx.opts && ctx.opts.allImages) this.line(ctx, 'img'); return; }
+    if (role === 'img') { const name = accessibleName(n); if (name) this.line(ctx, 'img ' + q(name)); return; }
     if (isInteractiveRole(role)) { this.interactive++; this.line(ctx, this.describe(n, role)); return; }
-    if (role === 'heading') { this.flush(ctx); const lvl = n._attrs['aria-level'] || (ln[0] === 'h' ? ln[1] : '2'); const t = collapse(textWithAlts(n)); const inner = { depth: ctx.depth, buf: '', prefix: 'heading[' + lvl + '] ' }; this.renderInlineInteractive(n, inner, 'heading[' + lvl + '] '); return; }
+    if (role === 'heading') { this.flush(ctx); const lvl = n._attrs['aria-level'] || (ln[0] === 'h' ? ln[1] : '2'); this.renderInlineInteractive(n, { depth: ctx.depth, buf: '' }, 'heading[' + lvl + '] '); return; }
     if (role === 'listitem') { this.flush(ctx); const start = this.lines.length; const inner = { depth: ctx.depth + 1, buf: '' }; this.renderChildren(n, inner); this.flush(inner); if (this.lines.length === start) this.push(ctx.depth, '- ""'); else { this.lines[start] = '  '.repeat(Math.min(ctx.depth, ALIGN.maxDepth)) + '- ' + this.lines[start].replace(/^ */, ''); } return; }
     if (role === 'list') { this.flush(ctx); const items = n.children.filter(c => c.localName === 'li' || c.localName === 'dt' || c.localName === 'dd' || (c._attrs.role || '').match(/item/)).length; const name = accessibleName(n); this.push(ctx.depth, 'list' + (name ? ' ' + q(name) : '') + (items ? ' (' + items + ' items)' : '') + ':'); const inner = { depth: ctx.depth + 1, buf: '' }; this.renderChildren(n, inner); this.flush(inner); return; }
     if (role === 'table') { this.flush(ctx); this.renderTable(n, ctx); return; }
@@ -2324,7 +2338,7 @@ class Snapshot {
     if (role === 'iframe') { this.flush(ctx); this.push(ctx.depth, 'iframe ' + q(n._attrs.title || n._attrs.name || '') + (n._attrs.src ? ' -> ' + clip(n._attrs.src, ALIGN.maxHref) : '')); return; }
     if (role === 'media') { this.flush(ctx); this.push(ctx.depth, ln + (n._attrs.src ? ' -> ' + clip(n._attrs.src, ALIGN.maxHref) : '')); return; }
     if (role === 'alert' || role === 'status') { this.flush(ctx); const t = collapse(textWithAlts(n)); if (t) this.push(ctx.depth, role + ' ' + q(t)); return; }
-    if (LANDMARKS[role] || role === 'nav' || role === 'main' || role === 'header' || role === 'footer' || role === 'aside' || role === 'form' || role === 'dialog' || role === 'details' || role === 'fieldset' || role === 'section' || role === 'article' || role === 'search') {
+    if (LANDMARKS[role]) {
       // generic sections/articles without a name are flattened to keep depth low
       const name = accessibleName(n) || (role === 'details' ? collapse((n.children.find(c => c.localName === 'summary') || { textContent: '' }).textContent) : '') || (role === 'fieldset' ? collapse((n.children.find(c => c.localName === 'legend') || { textContent: '' }).textContent) : '') || (role === 'form' ? (n._attrs.name || n._attrs.id || '') : '');
       if ((role === 'section' || role === 'article') && !name) { this.flush(ctx); this.renderChildren(n, ctx); this.flush(ctx); return; }
@@ -2333,7 +2347,7 @@ class Snapshot {
       if (role === 'details') { head = 'details ' + this.ref(n.children.find(c => c.localName === 'summary') || n) + (name ? ' ' + q(name) : '') + (n.open ? ' (open)' : ' (closed)'); this.interactive++; }
       this.push(ctx.depth, head + ':');
       const inner = { depth: ctx.depth + 1, buf: '' };
-      for (const c of n.childNodes.slice()) { if (role === 'details' && c.nodeType === 1 && c.localName === 'summary') continue; if (role === 'fieldset' && c.nodeType === 1 && c.localName === 'legend') continue; this.renderNode(c, inner); }
+      for (const c of n.childNodes) { if (role === 'details' && c.nodeType === 1 && c.localName === 'summary') continue; if (role === 'fieldset' && c.nodeType === 1 && c.localName === 'legend') continue; this.renderNode(c, inner); }
       if (n.shadowRoot) this.renderChildren(n.shadowRoot, inner);
       this.flush(inner); return;
     }
@@ -2361,7 +2375,7 @@ class Snapshot {
   }
   renderTable(t, ctx) {
     const cap = t.children.find(c => c.localName === 'caption'); const name = accessibleName(t) || (cap ? collapse(cap.textContent) : '');
-    const rows = R.collect(t, e => e.localName === 'tr' && e.closest('table') === t);
+    const rows = R.tableRows(t);
     this.push(ctx.depth, 'table' + (name ? ' ' + q(name) : '') + ' (' + rows.length + ' rows):');
     const inner = { depth: ctx.depth + 1, buf: '' };
     for (const r of rows) this.renderRow(r, inner);
@@ -2387,33 +2401,41 @@ class Snapshot {
 // ------------------------------------------------------- Readable text
 function readableText(root, opts) {
   opts = opts || {};
-  let out = ''; let listDepth = 0;
-  const nl = n => { if (out && !out.endsWith('\n')) out += '\n'; for (let i = 0; i < n - 1; i++) if (!out.endsWith('\n\n')) out += '\n'; };
+  const parts = []; let listDepth = 0;
+  const endsNl = () => { let k = 0; for (let i = parts.length - 1; i >= 0 && k < 2; i--) { const p = parts[i]; for (let j = p.length - 1; j >= 0 && k < 2; j--) { if (p[j] === '\n') k++; else return k; } } return k; };
+  const nl = n => { if (parts.length && endsNl() === 0) parts.push('\n'); if (n > 1 && endsNl() < 2) parts.push('\n'); };
+  const push = s => { if (s) parts.push(s); };
   const rec = (node) => {
-    for (const c of node.childNodes) {
-      if (c.nodeType === 3) { if (node.localName === 'pre') out += c.data; else out += c.data.replace(/[\s ]+/g, ' '); continue; }
+    const cn = node.childNodes;
+    for (let i = 0; i < cn.length; i++) {
+      const c = cn[i];
+      if (c.nodeType === 3) { push(node.localName === 'pre' ? c.data : c.data.replace(/[\s ]+/g, ' ')); continue; }
       if (c.nodeType !== 1) continue;
       const ln = c.localName;
-      if (ln === 'noscript' && !R.opts.js) { rec(c); continue; }
       if (SKIP_TAGS.has(ln) || ln === 'svg' || !R.isVisible(c) || c._attrs['aria-hidden'] === 'true') continue;
-      if (ln === 'br') { out += '\n'; continue; }
-      if (ln === 'img') { const alt = collapse(c._attrs.alt || ''); if (alt) out += '![' + alt + ']'; continue; }
-      if (/^h[1-6]$/.test(ln)) { nl(2); out += '#'.repeat(+ln[1]) + ' '; rec(c); nl(2); continue; }
-      if (ln === 'p' || ln === 'div' || ln === 'section' || ln === 'article' || ln === 'main' || ln === 'header' || ln === 'footer' || ln === 'nav' || ln === 'aside' || ln === 'form' || ln === 'fieldset' || ln === 'figure' || ln === 'figcaption' || ln === 'address' || ln === 'details' || ln === 'summary' || ln === 'dialog' || ln === 'dl' || ln === 'dt' || ln === 'dd' || ln === 'blockquote') { nl(ln === 'p' || ln === 'blockquote' ? 2 : 1); if (ln === 'blockquote') { const save = out.length; rec(c); out = out.slice(0, save) + out.slice(save).trim().split('\n').map(l => '> ' + l).join('\n'); } else rec(c); nl(ln === 'p' ? 2 : 1); continue; }
-      if (ln === 'ul' || ln === 'ol' || ln === 'menu') { nl(1); listDepth++; let i = ln === 'ol' ? (parseInt(c._attrs.start, 10) || 1) : 0; for (const li of c.children) { if (li.localName !== 'li') { rec({ childNodes: [li] }); continue; } nl(1); out += '  '.repeat(listDepth - 1) + (ln === 'ol' ? (i++) + '. ' : '- '); rec(li); } listDepth--; nl(1); continue; }
-      if (ln === 'li') { nl(1); out += '- '; rec(c); continue; }
-      if (ln === 'pre') { nl(2); out += '```\n' + c.textContent.replace(/\s+$/, '') + '\n```'; nl(2); continue; }
-      if (ln === 'code' && node.localName !== 'pre') { out += '`'; rec(c); out += '`'; continue; }
-      if (ln === 'table') { nl(2); const rows = R.collect(c, e => e.localName === 'tr' && e.closest('table') === c); rows.forEach((r, ri) => { const cells = r.children.filter(x => x.localName === 'td' || x.localName === 'th'); out += '| ' + cells.map(x => collapse(readableText(x, opts)).replace(/\|/g, '\\|')).join(' | ') + ' |\n'; if (ri === 0 && cells.length) out += '|' + cells.map(() => ' --- ').join('|') + '|\n'; }); nl(2); continue; }
-      if (ln === 'hr') { nl(2); out += '---'; nl(2); continue; }
-      if (ln === 'a' && 'href' in c._attrs && opts.links !== false) { const h = c.href; const save = out.length; rec(c); const t = collapse(out.slice(save)); out = out.slice(0, save) + (t ? '[' + t + '](' + clip(h, ALIGN.maxHref) + ')' : ''); continue; }
-      if (ln === 'strong' || ln === 'b') { out += '**'; rec(c); out += '**'; continue; }
-      if (ln === 'em' || ln === 'i') { out += '_'; rec(c); out += '_'; continue; }
-      if (ln === 'input') { const t = c.type; if (t === 'hidden') continue; if (t === 'submit' || t === 'button') { out += '[' + (c.value || 'Submit') + ']'; continue; } if (t === 'checkbox' || t === 'radio') { out += c.checked ? '[x] ' : '[ ] '; continue; } out += '[' + (c.value || c.placeholder || c.name || 'input') + ']'; continue; }
-      if (ln === 'button') { out += '['; rec(c); out += ']'; continue; }
-      if (ln === 'select') { out += '[' + (c.selectedOptions.map(o => o.text).join(', ') || c.name || 'select') + ']'; continue; }
-      if (ln === 'textarea') { out += '[' + collapse(c.value || c.placeholder || '') + ']'; continue; }
-      if (ln === 'tr' || ln === 'td' || ln === 'th' || ln === 'thead' || ln === 'tbody' || ln === 'tfoot') { rec(c); if (ln === 'tr') nl(1); else out += ' '; continue; }
+      if (ln === 'br') { push('\n'); continue; }
+      if (ln === 'img') { const alt = collapse(c._attrs.alt || ''); if (alt) push('![' + alt + ']'); continue; }
+      if (/^h[1-6]$/.test(ln)) { nl(2); push('#'.repeat(+ln[1]) + ' '); rec(c); nl(2); continue; }
+      if (ln === 'p' || ln === 'div' || ln === 'section' || ln === 'article' || ln === 'main' || ln === 'header' || ln === 'footer' || ln === 'nav' || ln === 'aside' || ln === 'form' || ln === 'fieldset' || ln === 'figure' || ln === 'figcaption' || ln === 'address' || ln === 'details' || ln === 'summary' || ln === 'dialog' || ln === 'dl' || ln === 'dt' || ln === 'dd' || ln === 'blockquote') {
+        nl(ln === 'p' || ln === 'blockquote' ? 2 : 1);
+        if (ln === 'blockquote') { const save = parts.length; rec(c); const inner = parts.splice(save).join('').trim(); push(inner.split('\n').map(l => '> ' + l).join('\n')); }
+        else rec(c);
+        nl(ln === 'p' ? 2 : 1); continue;
+      }
+      if (ln === 'ul' || ln === 'ol' || ln === 'menu') { nl(1); listDepth++; let k = ln === 'ol' ? (parseInt(c._attrs.start, 10) || 1) : 0; for (const li of c.children) { if (li.localName !== 'li') { rec({ childNodes: [li] }); continue; } nl(1); push('  '.repeat(listDepth - 1) + (ln === 'ol' ? (k++) + '. ' : '- ')); rec(li); } listDepth--; nl(1); continue; }
+      if (ln === 'li') { nl(1); push('- '); rec(c); continue; }
+      if (ln === 'pre') { nl(2); push('```\n' + c.textContent.replace(/\s+$/, '') + '\n```'); nl(2); continue; }
+      if (ln === 'code' && node.localName !== 'pre') { push('`'); rec(c); push('`'); continue; }
+      if (ln === 'table') { nl(2); const rows = R.tableRows(c); rows.forEach((r, ri) => { const cells = r.children.filter(x => x.localName === 'td' || x.localName === 'th'); push('| ' + cells.map(x => collapse(readableText(x, opts)).replace(/\|/g, '\\|')).join(' | ') + ' |\n'); if (ri === 0 && cells.length) push('|' + cells.map(() => ' --- ').join('|') + '|\n'); }); nl(2); continue; }
+      if (ln === 'hr') { nl(2); push('---'); nl(2); continue; }
+      if (ln === 'a' && 'href' in c._attrs && opts.links !== false) { const h = c.href; const save = parts.length; rec(c); const t = collapse(parts.splice(save).join('')); if (t) push('[' + t + '](' + clip(h, ALIGN.maxHref) + ')'); continue; }
+      if (ln === 'strong' || ln === 'b') { push('**'); rec(c); push('**'); continue; }
+      if (ln === 'em' || ln === 'i') { push('_'); rec(c); push('_'); continue; }
+      if (ln === 'input') { const t = c.type; if (t === 'hidden') continue; if (t === 'submit' || t === 'button') { push('[' + (c.value || 'Submit') + ']'); continue; } if (t === 'checkbox' || t === 'radio') { push(c.checked ? '[x] ' : '[ ] '); continue; } push('[' + (c.value || c.placeholder || c.name || 'input') + ']'); continue; }
+      if (ln === 'button') { push('['); rec(c); push(']'); continue; }
+      if (ln === 'select') { push('[' + (c.selectedOptions.map(o => o.text).join(', ') || c.name || 'select') + ']'); continue; }
+      if (ln === 'textarea') { push('[' + collapse(c.value || c.placeholder || '') + ']'); continue; }
+      if (ln === 'tr' || ln === 'td' || ln === 'th' || ln === 'thead' || ln === 'tbody' || ln === 'tfoot') { rec(c); if (ln === 'tr') nl(1); else push(' '); continue; }
       const block = BLOCK_TAGS.has(ln);
       if (block) nl(1);
       rec(c);
@@ -2421,6 +2443,7 @@ function readableText(root, opts) {
     }
   };
   rec(root);
+  const out = parts.join('');
   return out.replace(/[ \t]+\n/g, '\n').replace(/^[ \t]+/gm, '').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
 }
 
@@ -2499,8 +2522,7 @@ function implicitSubmit(el) {
   const form = el.form || el.closest('form'); if (!form) return;
   const btn = form.elements.find(e => (e.localName === 'button' && e.type === 'submit') || (e.localName === 'input' && (e.type === 'submit' || e.type === 'image')));
   if (btn) { if (!R.isDisabled(btn)) userClick(btn); return; }
-  const fields = form.elements.filter(e => e.localName === 'input' && R.isTextInput(e));
-  if (fields.length <= 1 || true) R.submitForm(form, null, true);
+  R.submitForm(form, null, true);
 }
 function selectValue(el, value) {
   if (el.localName !== 'select') throw new Error('Element is not a select: ' + describeShort(el));
@@ -2599,7 +2621,7 @@ function tick(maxRuns) {
   R.deliverObservers();
   const budgetLeft = R.clock.now < R.opts.maxVirtualMs && R.timerRunsTotal < R.opts.maxTimerRuns;
   R.timerRunsTotal = (R.timerRunsTotal || 0) + r.ran;
-  return { more: !!(r.pending && r.ran > 0 && budgetLeft && !R.pendingNavigation) && R.timers.some(t => t.at <= R.opts.maxVirtualMs), ran: r.ran, timers: R.timers.length, navigate: !!R.pendingNavigation, vtime: R.clock.now };
+  return !!(r.pending && r.ran > 0 && budgetLeft && !R.pendingNavigation) && R.timers.some(t => t.at <= R.opts.maxVirtualMs);
 }
 function buildResult(extra) {
   const doc = R.document;
@@ -2645,7 +2667,7 @@ function performAction(a) {
     R.opts.maxVirtualMs = Math.max(R.opts.maxVirtualMs, target);
     const satisfied = () => { if (a.selector) { const e = R.document.querySelector(a.selector); return !!e && R.isVisible(e); } if (a.text) return (R.document.body ? R.innerText(R.document.body) : '').toLowerCase().includes(String(a.text).toLowerCase()); return false; };
     let ran = 0, found = !(a.selector || a.text) ? null : satisfied();
-    while (!found) { const r = R.runTimerBatch(50, Math.max(0, target - R.clock.now)); ran += r.ran; if (a.selector || a.text) found = satisfied(); if (found || !r.pending || r.navigate || R.clock.now >= target || (r.ran === 0 && !r.pending)) break; if (r.ran === 0) { R.clock.now = Math.min(target, R.clock.now + Math.min(r.next || ms, target - R.clock.now)); if (R.clock.now >= target) break; } }
+    while (!found) { const r = R.runTimerBatch(50, Math.max(0, target - R.clock.now)); ran += r.ran; if (r.ran > 0 && (a.selector || a.text)) found = satisfied(); if (found || !r.pending || r.navigate || R.clock.now >= target) break; if (r.ran === 0) { R.clock.now = Math.min(target, R.clock.now + Math.min(r.next || ms, target - R.clock.now)); if (R.clock.now >= target) break; } }
     if (found === null && R.clock.now < target) R.clock.now = target;
     return { acted: 'wait', ran, found: found === null ? undefined : !!found };
   }
@@ -2710,13 +2732,13 @@ function pageMetadata() {
   const ld = []; let ldBytes = 0;
   for (const s of doc.querySelectorAll('script[type="application/ld+json"]')) { if (ld.length >= 5) break; try { const t = s.textContent; if (ldBytes + t.length > 12000) break; ldBytes += t.length; ld.push(JSON.parse(t)); } catch (e) { /* ignore */ } }
   if (ld.length) out.jsonld = ld;
-  const text = doc.body ? doc.body.textContent : '';
-  out.wordCount = text ? text.split(/\s+/).filter(Boolean).length : 0;
+  out.wordCount = doc.body ? (doc.body.textContent.match(/\S+/g) || []).length : 0;
   out.headings = doc.querySelectorAll('h1,h2,h3').filter(h => R.isVisible(h)).slice(0, 30).map(h => h.localName + ': ' + clip(collapse(h.textContent), 120));
   out.links = doc.links.length; out.forms = doc.forms.length; out.images = doc.images.length; out.scripts = doc.scripts.length;
   out.feeds = doc.querySelectorAll('link[type="application/rss+xml"], link[type="application/atom+xml"]').map(l => R.resolveURL(l.getAttribute('href') || '', R.base())).filter(Boolean);
   return out;
 }
+const CLEAN_DROP = new Set(['svg', 'canvas', 'iframe', 'video', 'audio']);
 const KEEP_ATTRS = new Set(['href', 'src', 'alt', 'title', 'name', 'value', 'type', 'placeholder', 'action', 'method', 'for', 'aria-label', 'role', 'colspan', 'rowspan', 'datetime', 'checked', 'selected', 'disabled', 'label', 'lang', 'cite', 'start']);
 function cleanHtml(root) {
   const clone = root.cloneNode(true);
@@ -2726,8 +2748,7 @@ function cleanHtml(root) {
       if (c.nodeType === 3) { if (n.localName !== 'pre' && n.localName !== 'textarea') { c.data = c.data.replace(/[\s\u00a0]+/g, ' '); if (!c.data.trim() && (!c.previousSibling || !c.nextSibling)) { n.removeChild(c); continue; } } continue; }
       if (c.nodeType !== 1) continue;
       const ln = c.localName;
-      if (SKIP_TAGS.has(ln) || ln === 'svg' || ln === 'canvas' || ln === 'iframe' || ln === 'video' || ln === 'audio' || ln === 'input' && c.type === 'hidden') { n.removeChild(c); continue; }
-      const orig = c._cleanSource;
+      if (SKIP_TAGS.has(ln) || CLEAN_DROP.has(ln) || (ln === 'input' && c.type === 'hidden')) { n.removeChild(c); continue; }
       for (const an of c.getAttributeNames()) { if (!KEEP_ATTRS.has(an) && !an.startsWith('data-') || an.startsWith('on')) c.removeAttribute(an); }
       if (c._attrs.href !== undefined) c.setAttribute('href', R.resolveURL(c._attrs.href, R.base()) || c._attrs.href);
       if (c._attrs.src !== undefined) { if (/^data:/i.test(c._attrs.src) && c._attrs.src.length > 200) c.setAttribute('src', 'data:...'); else c.setAttribute('src', R.resolveURL(c._attrs.src, R.base()) || c._attrs.src); }
@@ -2741,9 +2762,8 @@ function cleanHtml(root) {
   };
   // hidden elements are removed based on the live tree, so mark them first
   const hidden = new Set(); R.walk(root, e => { if (e.nodeType === 1 && !R.isVisible(e)) hidden.add(e); });
-  const pairs = []; const a = [], b = []; R.walk(root, e => { if (e.nodeType === 1) a.push(e); }); R.walk(clone, e => { if (e.nodeType === 1) b.push(e); });
-  for (let i = 0; i < a.length && i < b.length; i++) if (hidden.has(a[i])) pairs.push(b[i]);
-  for (const e of pairs) if (e.parentNode) e.parentNode.removeChild(e);
+  const a = [], b = []; R.walk(root, e => { if (e.nodeType === 1) a.push(e); }); R.walk(clone, e => { if (e.nodeType === 1) b.push(e); });
+  for (let i = 0; i < a.length && i < b.length; i++) if (hidden.has(a[i]) && b[i].parentNode) b[i].parentNode.removeChild(b[i]);
   strip(clone);
   const out = clone.outerHTML;
   return out.includes('<pre') ? out : out.replace(/\s{2,}/g, ' ');
@@ -2772,11 +2792,14 @@ function listLinks(opts) {
   const styleArrived = n => { if (n.localName === 'style') { if (n.textContent.trim()) R.loadStyleElement(n); } else if (n.localName === 'link' && !R.document._parser) R.loadStyleElement(n); };
   R.onInsert = (c, p) => {
     baseInsert(c, p); R.cssGeneration++;
-    if (!R.opts.css || !R.document || !R.document._isMain || !c.isConnected) return;
-    if (c.nodeType === 3 && p.nodeType === 1 && p.localName === 'style' && !R.document._parser) { R.loadStyleElement(p); return; }
+    if (!R.opts.css || !R.document || !R.document._isMain) return;
+    if (c.nodeType === 3) { if (p.nodeType === 1 && p.localName === 'style' && !R.document._parser && p.isConnected) R.loadStyleElement(p); return; }
     if (c.nodeType !== 1) return;
-    if (c.localName === 'style' || c.localName === 'link') styleArrived(c);
-    else if (c.childNodes.length) R.walk(c, n => { if (n.nodeType === 1 && (n.localName === 'style' || n.localName === 'link')) styleArrived(n); });
+    const isStyle = c.localName === 'style' || c.localName === 'link';
+    if (!isStyle && !c.childNodes.length) return;
+    if (!c.isConnected) return;
+    if (isStyle) styleArrived(c);
+    else R.walk(c, n => { if (n.nodeType === 1 && (n.localName === 'style' || n.localName === 'link')) styleArrived(n); });
   };
   R.onRemove = (c, p) => { baseRemove(c, p); R.cssGeneration++; };
   R.onAttr = (el, name, old, val) => { baseAttr(el, name, old, val); if (name === 'class' || name === 'id' || name === 'style' || name === 'hidden' || name === 'open' || name === 'type') R.cssGeneration++; if (el.localName === 'style' && !R.document._parser) R.cssGeneration++; };
@@ -2864,22 +2887,25 @@ function installGlobals() {
 installGlobals();
 
 // ------------------------------------------------------------ __browser
+const parseOpts = j => (j ? JSON.parse(j) : {});
+// every entry point returns a JSON string; failures become {ok:false, error}
+const guard = (fn, withStack) => (...args) => { try { return JSON.stringify(fn(...args)); } catch (e) { return JSON.stringify({ ok: false, error: (withStack && e && e.stack) || (e && e.message) || String(e) }); } };
+const rootOf = o => { const r = o.ref ? getRef(o.ref) : (o.selector ? R.document.querySelector(o.selector) : null); if ((o.ref || o.selector) && !r) throw new Error('No element matches'); return r; };
 const api = {
-  version: '0.1.0',
-  load(html, url, optsJSON) { try { const opts = optsJSON ? JSON.parse(optsJSON) : {}; const r = loadPage(html, url, opts); return JSON.stringify(Object.assign(buildResult(), r)); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.stack) || String(e) }); } },
-  tick(n) { try { return JSON.stringify(tick(n)); } catch (e) { return JSON.stringify({ more: false, error: (e && e.message) || String(e) }); } },
-  result(snapJSON) { try { const o = snapJSON ? JSON.parse(snapJSON) : null; const extra = {}; if (o !== null && o !== false) Object.assign(extra, takeSnapshot(o || {})); return JSON.stringify(buildResult(extra)); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.stack) || String(e) }); } },
-  act(actionJSON) { try { R.pendingNavigation = null; R.cookieSets = []; R.console = []; R.dialogs = []; const a = JSON.parse(actionJSON); const r = performAction(a); return JSON.stringify(Object.assign({ ok: !r.error }, r, { navigate: R.pendingNavigation || undefined })); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.message) || String(e) }); } },
-  snapshot(optsJSON) { try { return JSON.stringify(takeSnapshot(optsJSON ? JSON.parse(optsJSON) : {})); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.message) || String(e) }); } },
-  text(optsJSON) { try { const o = optsJSON ? JSON.parse(optsJSON) : {}; const root = o.ref ? getRef(o.ref) : (o.selector ? R.document.querySelector(o.selector) : (R.document.body || R.document)); if (!root) throw new Error('No element matches'); return JSON.stringify({ text: readableText(root, o), title: R.document.title, url: R.location.href }); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.message) || String(e) }); } },
-  html(optsJSON) { try { const o = optsJSON ? JSON.parse(optsJSON) : {}; const root = o.ref ? getRef(o.ref) : (o.selector ? R.document.querySelector(o.selector) : (o.clean ? (R.document.body || R.document.documentElement) : R.document.documentElement)); if (!root) throw new Error('No element matches'); return JSON.stringify({ html: o.clean ? cleanHtml(root) : root.outerHTML }); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.message) || String(e) }); } },
-  find(query, optsJSON) { try { return JSON.stringify(findText(query, optsJSON ? JSON.parse(optsJSON) : {})); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.message) || String(e) }); } },
-  links(optsJSON) { try { return JSON.stringify(listLinks(optsJSON ? JSON.parse(optsJSON) : {})); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.message) || String(e) }); } },
-  status() { return JSON.stringify(buildResult({ timers: R.timers.length })); },
-  metadata() { try { return JSON.stringify(pageMetadata()); } catch (e) { return JSON.stringify({ ok: false, error: (e && e.message) || String(e) }); } },
+  version: '0.2.0',
+  load: guard((html, url, optsJSON) => { const r = loadPage(html, url, parseOpts(optsJSON)); return Object.assign(buildResult(), r); }, true),
+  // 1 while timers still have work within the virtual-time budget, else 0
+  tick(n) { try { return tick(n) ? 1 : 0; } catch (e) { return 0; } },
+  result: guard(snapJSON => { const o = snapJSON ? JSON.parse(snapJSON) : null; const extra = {}; if (o !== null && o !== false) Object.assign(extra, takeSnapshot(o || {})); return buildResult(extra); }, true),
+  act: guard(actionJSON => { R.pendingNavigation = null; R.cookieSets = []; R.console = []; R.dialogs = []; const r = performAction(JSON.parse(actionJSON)); return Object.assign({ ok: !r.error }, r, { navigate: R.pendingNavigation || undefined }); }),
+  snapshot: guard(o => takeSnapshot(parseOpts(o))),
+  text: guard(optsJSON => { const o = parseOpts(optsJSON); const root = rootOf(o) || R.document.body || R.document; return { text: readableText(root, o), title: R.document.title, url: R.location.href }; }),
+  html: guard(optsJSON => { const o = parseOpts(optsJSON); const root = rootOf(o) || (o.clean ? (R.document.body || R.document.documentElement) : R.document.documentElement); return { html: o.clean ? cleanHtml(root) : root.outerHTML }; }),
+  find: guard((query, optsJSON) => findText(query, parseOpts(optsJSON))),
+  links: guard(o => listLinks(parseOpts(o))),
+  metadata: guard(() => pageMetadata()),
   // UTF-8 byte length of a string: lets the host read a result with one memread
   bytes(s) { s = String(s); let n = 0; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c < 0x80) n += 1; else if (c < 0x800) n += 2; else if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length) { n += 4; i++; } else n += 3; } return n; },
 };
-Object.defineProperty(api, '_R', { value: R, enumerable: false });
 Object.defineProperty(globalThis, '__browser', { value: api, writable: false, configurable: false, enumerable: false });
 })();

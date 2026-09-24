@@ -16,11 +16,11 @@ export function makePage({ fetch } = {}) {
   const sandbox = {
     __host_fetch(url, method, headersJSON, body, kind) {
       requests.push({ url, method, headers: JSON.parse(headersJSON), body, kind })
-      if (fetch) return JSON.stringify(fetch(url, method, body))
+      if (fetch) { const r = fetch(url, method, body); const body2 = r.body; delete r.body; return JSON.stringify(r) + '\n' + (body2 || '') }
       const u = new URL(url)
       const file = join(fixtures, u.pathname.replace(/^\//, ''))
-      if (!existsSync(file)) return JSON.stringify({ status: 404, headers: {}, body: 'not found' })
-      return JSON.stringify({ status: 200, headers: { 'content-type': file.endsWith('.json') ? 'application/json' : file.endsWith('.css') ? 'text/css' : file.endsWith('.js') ? 'application/javascript' : 'text/plain' }, body: readFileSync(file, 'utf8'), url })
+      if (!existsSync(file)) return JSON.stringify({ status: 404, headers: {}, url }) + '\nnot found'
+      return JSON.stringify({ status: 200, headers: { 'content-type': file.endsWith('.json') ? 'application/json' : file.endsWith('.css') ? 'text/css' : file.endsWith('.js') ? 'application/javascript' : 'text/plain' }, url }) + '\n' + readFileSync(file, 'utf8')
     },
     __host_log(level, text) { if (process.env.VERBOSE) console.error(`[page ${level}] ${text}`) },
   }
@@ -32,7 +32,7 @@ export function makePage({ fetch } = {}) {
     requests,
     // Between ticks we yield to the event loop so promise jobs run, which is
     // what the ship does with QTS_ExecutePendingJob between engine steps.
-    async settle() { let guard = 0; while (guard++ < 60) { await new Promise(r => setImmediate(r)); const t = call('tick'); await new Promise(r => setImmediate(r)); if (!t.more) break } },
+    async settle() { let guard = 0; while (guard++ < 60) { await new Promise(r => setImmediate(r)); const more = api.tick(25); await new Promise(r => setImmediate(r)); if (!more) break } },
     async load(html, url, opts) {
       const r = call('load', html, url, JSON.stringify(opts || {}))
       if (!r.ok) throw new Error(r.error)

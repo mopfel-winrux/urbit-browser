@@ -8,12 +8,11 @@
 ++  parse
   |=  [raw=@t request=parts:url now=@da]
   ^-  (unit cookie)
-  =/  segs=(list tape)  (split-semi (trip raw))
+  =/  segs=(list tape)  (split-on:url ";" (trip raw))
   ?~  segs  ~
   =/  eq  (find "=" i.segs)
   =/  name=tape  (trim-ws ?~(eq "" (scag u.eq i.segs)))
   =/  value=tape  (trim-ws ?~(eq i.segs (slag +(u.eq) i.segs)))
-  ?:  &(=(~ name) =(~ value))  ~
   ?:  =(~ name)  ~
   =/  default-path=@t
     =/  p  (trip path.request)
@@ -115,48 +114,23 @@
   %+  rap  3
   %+  join  '; '
   (turn cookies |=(c=cookie (rap 3 name.c '=' value.c ~)))
-++  prune
-  |=  [jar=(list cookie) now=@da]
-  ^-  (list cookie)
-  (skip jar |=(c=cookie &(?=(^ expires.c) (lte u.expires.c now))))
-::  helpers
+::  +absorb: parse raw Set-Cookie values against a request and store them
 ::
-++  split-semi
-  |=  t=tape
-  ^-  (list tape)
-  =|  cur=tape
-  =|  out=(list tape)
-  |-  ^-  (list tape)
-  ?~  t  (flop [(flop cur) out])
-  ?:  =(';' i.t)  $(t t.t, out [(flop cur) out], cur ~)
-  $(t t.t, cur [i.t cur])
-++  trim-ws
-  |=  t=tape
-  ^-  tape
-  =/  ws  |=(c=@t |(=(c ' ') =(c '\09') =(c '\0a') =(c '\0d')))
-  =/  front
-    |-  ^-  tape
-    ?~  t  t
-    ?:((ws i.t) $(t t.t) t)
-  %-  flop
-  =/  back  (flop front)
-  |-  ^-  tape
-  ?~  back  back
-  ?:((ws i.back) $(back t.back) back)
+++  absorb
+  |=  [jar=(list cookie) raws=(list @t) request=parts:url now=@da]
+  ^-  (list cookie)
+  %+  roll  raws
+  |=  [raw=@t acc=_jar]
+  =/  got  (parse raw request now)
+  ?~  got  acc
+  (store acc u.got now)
+++  trim-ws  trim:url
 ::  +parse-date: HTTP dates such as "Wed, 21 Oct 2015 07:28:00 GMT"
 ::
 ++  parse-date
   |=  t=tape
   ^-  (unit @da)
-  =/  toks=(list tape)
-    %+  skip
-      =|  cur=tape
-      =|  out=(list tape)
-      |-  ^-  (list tape)
-      ?~  t  (flop [(flop cur) out])
-      ?:  |(=(' ' i.t) =(',' i.t) =('-' i.t) =('\09' i.t))  $(t t.t, out [(flop cur) out], cur ~)
-      $(t t.t, cur [i.t cur])
-    |=(s=tape =(~ s))
+  =/  toks=(list tape)  (skip (split-on:url " ,-\09" t) |=(s=tape =(~ s)))
   =|  day=(unit @ud)
   =|  month=(unit @ud)
   =|  yr=(unit @ud)

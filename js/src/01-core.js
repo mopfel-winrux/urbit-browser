@@ -97,9 +97,10 @@ function decodeEntities(s) {
     return v;
   });
 }
+function collapse(s) { return s.replace(/[\s\u00a0]+/g, ' ').trim(); }
 function escapeText(s) { return s.replace(/[&<> ]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&nbsp;'); }
 function escapeAttr(s) { return s.replace(/[&" ]/g, c => c === '&' ? '&amp;' : c === '"' ? '&quot;' : '&nbsp;'); }
-R.decodeEntities = decodeEntities; R.escapeText = escapeText; R.escapeAttr = escapeAttr;
+R.decodeEntities = decodeEntities; R.escapeText = escapeText; R.escapeAttr = escapeAttr; R.collapse = collapse;
 
 // ------------------------------------------------------------------ URLs
 // A small WHATWG-ish URL implementation: enough for resolution, components
@@ -199,7 +200,6 @@ function parseURL(url) {
     return out;
   }
   rest = rest.replace(/^[\\/]+/, '');
-  if (protocol === 'file:' && !/^[\\/]/.test(m[2].slice(2))) { /* file:///path */ }
   let end = rest.length;
   for (let i = 0; i < rest.length; i++) { const c = rest[i]; if (c === '/' || c === '\\' || c === '?' || c === '#') { end = i; break; } }
   let authority = rest.slice(0, end); rest = rest.slice(end).replace(/\\/g, '/');

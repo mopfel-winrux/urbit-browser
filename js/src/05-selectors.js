@@ -68,7 +68,7 @@ class SelParser {
           this.pos++;
           const lname = name.toLowerCase();
           if (lname === 'not' || lname === 'is' || lname === 'where' || lname === 'has' || lname === 'matches' || lname === '-webkit-any') {
-            this.ws(); const start = this.pos;
+            this.ws();
             // :has() may start with a combinator
             let rel = null; if (lname === 'has' && /[>+~]/.test(this.s[this.pos])) { rel = this.s[this.pos]; this.pos++; }
             arg = this.parseList(); this.ws();
@@ -81,7 +81,9 @@ class SelParser {
             arg = this.s.slice(start, this.pos - 1).trim();
           }
         }
-        c.pseudos.push({ name: name.toLowerCase(), arg }); any = true; continue;
+        const lname2 = name.toLowerCase();
+        if (arg === null && /^(not|is|where|has|matches|-webkit-any|nth-child|nth-last-child|nth-of-type|nth-last-of-type|lang)$/.test(lname2)) throw syntaxError(this.s);
+        c.pseudos.push({ name: lname2, arg }); any = true; continue;
       }
       const t = this.ident();
       if (t != null) { if (c.tag) throw syntaxError(this.s); c.tag = t.toLowerCase(); any = true; continue; }
@@ -101,7 +103,7 @@ function nthMatch(ab, idx) { const [a, b] = ab; if (a === 0) return idx === b; c
 function matchCompound(el, c, scope) {
   if (c.tag && c.tag !== '*') { if (el._html ? el.localName !== c.tag : el.localName.toLowerCase() !== c.tag) return false; }
   if (c.id !== null && el._attrs.id !== c.id) return false;
-  if (c.classes.length) { const cl = el._attrs.class; if (!cl) return false; const list = cl.split(/\s+/); for (const x of c.classes) if (!list.includes(x)) return false; }
+  if (c.classes.length) { const cl = el._attrs.class; if (!cl) return false; if (el._classCacheSrc !== cl) { el._classCacheSrc = cl; el._classCache = classTokens(cl); } const list = el._classCache; for (const x of c.classes) if (!list.includes(x)) return false; }
   for (const a of c.attrs) {
     const v = el._attrs[a.name]; if (v === undefined) return false;
     if (!a.op) continue;
