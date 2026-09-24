@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>Form fixture</title></head>
+<body>
+  <form name="login" action="/login" method="post">
+    <p><label>Email <input type="email" name="email" required></label></p>
+    <p><label>Password <input type="password" name="password"></label></p>
+    <fieldset>
+      <legend>Role</legend>
+      <label><input type="radio" name="role" value="user" checked> User</label>
+      <label><input type="radio" name="role" value="admin"> Admin</label>
+    </fieldset>
+    <label><input type="checkbox" name="remember" checked> Remember</label>
+    <input type="hidden" name="csrf" value="">
+    <button type="submit" name="go" value="Sign in">Sign in</button>
+  </form>
+</body>
+</html>

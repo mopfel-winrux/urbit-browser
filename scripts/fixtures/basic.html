@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Basic fixture</title>
+  <style>body { font-family: sans-serif }</style>
+</head>
+<body>
+  <header>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="/">Home</a></li>
+        <li><a href="docs/intro.html">Docs</a></li>
+        <li><a href="https://example.com/x">External</a>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <h1>Welcome to the fixture</h1>
+    <p>Tom &amp; Jerry &copy;<span style="display:none"> hidden text</span></p>
+    <p hidden>ENTITY_TEST &amp;amp;</p>
+    <form action="/search" method="get">
+      <label for="q">Search</label>
+      <input id="q" name="q" type="text" placeholder="Type here">
+      <label>Language
+        <select name="lang">
+          <option value="en" selected>English</option>
+          <option value="fr">Français</option>
+        </select>
+      </label>
+      <label><input type="checkbox" name="remember"> Remember me</label>
+      <button type="submit">Go</button>
+    </form>
+    <table>
+      <caption>People</caption>
+      <thead><tr><th>Name</th><th>Age</th></tr></thead>
+      <tbody>
+        <tr><td>Bob</td><td>42</td></tr>
+        <tr><td>Alice</td><td><a href="/alice">31</a></td></tr>
+      </tbody>
+    </table>
+    <img src="logo.png" alt="Company logo">
+    <template><p>never shown</p></template>
+    <script type="application/ld+json">{"@type":"Thing"}</script>
+  </main>
+  <footer><p>Footer text</p></footer>
+</body>
+</html>

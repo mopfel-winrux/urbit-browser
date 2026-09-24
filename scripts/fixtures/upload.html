@@ -1,0 +1,9 @@
+<!DOCTYPE html><html><head><title>Upload fixture</title></head><body>
+<form action="/upload" method="post" enctype="multipart/form-data">
+  <label>File <input type="file" name="doc"></label>
+  <input type="text" name="note" value="hi">
+  <button type="submit">Send</button>
+</form>
+<div id="wait-target"></div>
+<script>setTimeout(function(){ var d=document.createElement('p'); d.id='late-p'; d.textContent='appeared'; document.getElementById('wait-target').appendChild(d); }, 12000);</script>
+</body></html>

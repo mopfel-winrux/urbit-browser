@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><title>Module fixture</title>
+<script type="importmap">{"imports":{"vendor":"/vendor.js"}}</script>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+import { greet, counter as c } from './lib.js';
+import * as util from './util.js';
+import vendorDefault, { VERSION } from 'vendor';
+document.getElementById('out').textContent = greet('world') + '|' + c() + '|' + util.twice(21) + '|' + vendorDefault() + '|' + VERSION + '|' + import.meta.url.endsWith('#inline-module-1');
+import('./util.js').then(m => { const p = document.createElement('p'); p.textContent = 'dynamic:' + m.twice(2); document.body.appendChild(p); });
+</script>
+<script type="module" src="/entry.js"></script>
+</body></html>

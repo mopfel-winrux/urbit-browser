@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="/sub/dir/">
+  <title>CSS fixture</title>
+  <meta name="description" content="A page for cascade tests">
+  <meta property="og:title" content="CSS OG title">
+  <link rel="canonical" href="https://fixtures.test/canonical">
+  <link rel="stylesheet" href="../../site.css">
+  <script type="application/ld+json">{"@type":"Article","headline":"LD headline"}</script>
+  <style>
+    .menu { display: none; }
+    .menu.open { display: block; }
+    #gone { visibility: hidden; }
+    @media (max-width: 600px) { .desktop-only { display: none; } }
+    @media (min-width: 601px) { .mobile-only { display: none; } }
+    .forced { display: none !important; }
+  </style>
+</head>
+<body>
+  <nav class="menu"><a href="hidden.html">Hidden menu link</a></nav>
+  <nav class="menu open"><a href="open.html">Open menu link</a></nav>
+  <p id="gone">invisible paragraph</p>
+  <p class="desktop-only">desktop text</p>
+  <p class="mobile-only">mobile text</p>
+  <p class="forced" style="display:block">forced hidden</p>
+  <p class="ext">external stylesheet text</p>
+  <p class="shown-by-style" style="display:none">inline hidden</p>
+  <a href="rel.html" id="rel">Relative link</a>
+  <noscript><p>noscript content</p></noscript>
+  <button id="toggle" onclick="document.querySelector('.menu').classList.add('open')">Toggle</button>
+  <div id="late"></div>
+  <script>
+    var s = document.createElement('style'); s.textContent = '#late { display:none }'; document.head.appendChild(s);
+  </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SPA fixture</title>
+  <script>
+    window.__log = [];
+    var count = 0;
+    document.addEventListener('DOMContentLoaded', function () {
+      var h = document.createElement('h2');
+      h.textContent = 'Rendered by script';
+      document.getElementById('app').appendChild(h);
+      var ul = document.createElement('ul');
+      ['apple', 'banana', 'cherry'].forEach(function (f) { var li = document.createElement('li'); li.innerText = f; ul.appendChild(li); });
+      document.getElementById('app').appendChild(ul);
+      document.getElementById('btn').addEventListener('click', function (ev) {
+        ev.preventDefault();
+        count++;
+        document.getElementById('count').textContent = 'count: ' + count;
+      });
+      var info = document.createElement('p');
+      info.textContent = 'cookie=' + (document.cookie.match(/session=([^;]+)/) || [])[1] + ' theme=' + localStorage.getItem('theme');
+      document.getElementById('app').appendChild(info);
+      document.cookie = 'visited=1; path=/';
+      localStorage.setItem('visits', String((parseInt(localStorage.getItem('visits') || '0', 10) + 1)));
+    });
+    setTimeout(function () {
+      var p = document.createElement('p'); p.textContent = 'timer fired'; document.getElementById('app').appendChild(p);
+    }, 250);
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <p id="count">count: 0</p>
+  <button id="btn">Increment</button>
+  <a id="go" href="/elsewhere?x=1">Go elsewhere</a>
+  <script src="app.js"></script>
+</body>
+</html>
